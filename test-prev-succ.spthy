@@ -1,0 +1,95 @@
+theory test_prev_succ
+begin
+
+builtins: diffie-hellman, multiset
+
+restriction Succ1: "All m a result #i . Succ(m, a, result) @i ==> (not m = a & result = a + 1) | (m = a & result = 1)"
+restriction Succ2: "not Ex m x result #i . Succ(m, m+x, result) @i"
+restriction Succ3: "not Ex m a x #i . Succ(m, a, m+x) @i"
+
+restriction Prev1: "All m a result #i . Prev(m, a, result) @i ==> (a = 1 & result = m) | (Ex x . (a = x + 1 & result = x))"
+restriction Prev2: "not Ex m x result #i . Prev(m, m+x, result) @i"
+restriction Prev3: "not Ex m a x #i . Prev(m, a, m+x) @i"
+
+
+rule TestSucc1:
+    [] --[ Succ(1+1+1, 1, a) ]-> []
+
+lemma TestAllSucc1:
+    all-traces
+    "All a #i . Succ(1+1+1, 1, a) @i ==> a = 1+1"
+
+lemma TestExSucc1:
+    exists-trace
+    "Ex #i . Succ(1+1+1, 1, 1+1) @i"
+
+// --------------------------------------------------
+
+rule TestSucc2:
+    [] --[ Succ(1+1+1, 1+1, a) ]-> []
+
+lemma TestAllSucc2:
+    all-traces
+    "All a #i . Succ(1+1+1, 1+1, a) @i ==> a = 1+1+1"
+
+lemma TestExSucc2:
+    exists-trace
+    "Ex #i . Succ(1+1+1, 1+1, 1+1+1) @i"
+
+// --------------------------------------------------
+
+rule TestSucc3:
+    [] --[ Succ(1+1+1, 1+1+1, a) ]-> []
+
+lemma TestAllSucc3:
+    all-traces
+    "All a #i . Succ(1+1+1, 1+1+1, a) @i ==> a = 1"
+
+lemma TestExSucc3:
+    exists-trace
+    "Ex #i . Succ(1+1+1, 1+1+1, 1) @i"
+
+
+// --------------------------------------------------
+
+rule TestPrev1:
+    [] --[ Prev(1+1+1, 1, a) ]-> []
+
+
+lemma TestAllPrev1:
+    all-traces
+    "All a #i . Prev(1+1+1, 1, a) @i ==> a = 1+1+1"
+
+lemma TestExPrev1:
+    exists-trace
+    "Ex #i . Prev(1+1+1, 1, 1+1+1) @i"
+
+// --------------------------------------------------
+
+rule TestPrev2:
+    [] --[ Prev(1+1+1, 1+1, a) ]-> []
+
+
+lemma TestAllPrev2:
+    all-traces
+    "All a #i . Prev(1+1+1, 1+1, a) @i ==> a = 1"
+
+lemma TestExPrev2:
+    exists-trace
+    "Ex #i . Prev(1+1+1, 1+1, 1) @i"
+
+// --------------------------------------------------
+
+rule TestPrev3:
+    [] --[ Prev(1+1+1, 1+1+1, a) ]-> []
+
+lemma TestAllPrev3:
+    all-traces
+    "All a #i . Prev(1+1+1, 1+1+1, a) @i ==> a = 1+1"
+
+lemma TestExPrev3:
+    exists-trace
+    "Ex #i . Prev(1+1+1, 1+1+1, 1+1) @i"
+
+
+end

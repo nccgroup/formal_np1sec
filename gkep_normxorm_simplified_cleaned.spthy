@@ -1,0 +1,487 @@
+theory GKEP_3_normxorm_simplified_cleaned
+begin
+
+/*
+
+Limitations:
+
+- Only one group can be created, with size 3.
+- Only one group is instantiated per trace.
+
+*/
+
+builtins: diffie-hellman, multiset //, hashing  //, xor
+
+/*
+functions: xor/2, succ/2, prev/2
+//equations: xor(x.1, xor(x.1, x.2)) = x.2
+
+
+equations: succ(modulus, modulus) = 1, succ(arg + neg_arg, arg) = (arg + 1)
+equations: prev(a+b+1, a+1) = a, prev(m, 1) = m
+// equations: prev(m, succ(m, a)) = a
+*/
+
+restriction Unique: "All x #i #j. Unique(x) @ #i & Unique(x) @ #j ==> #i = #j"
+restriction Equality: "All x y #i. Eq(x,y) @ #i ==> x = y"
+restriction Inequality: "All x #i. Neq(x,x) @ #i ==> F"
+restriction LessThan: "All x y #i. LessThan(x,y) @ #i ==> (Ex z. x + z = y)"
+restriction GreaterThan: "All x y #i. GreaterThan(x,y) @ #i ==> (Ex z. x = y + z)"
+
+restriction CompleteRoundTwo: "All gid idx A #i . CompleteRoundTwo(gid, idx, A) @i ==> Ex #j . CompleteRoundOne(gid, idx, A) @j & #j < #i"
+
+
+restriction Succ1: "All m a result #i . Succ(m, a, result) @i ==> (not m = a & result = a + 1) | (m = a & result = 1)"
+restriction Succ2: "not Ex m x result #i . Succ(m, m+x, result) @i"
+restriction Succ3: "not Ex m a x #i . Succ(m, a, m+x) @i"
+
+restriction Prev1: "All m a result #i . Prev(m, a, result) @i ==> (a = 1 & result = m) | (Ex x . (a = x + 1 & result = x))"
+restriction Prev2: "not Ex m x result #i . Prev(m, m+x, result) @i"
+restriction Prev3: "not Ex m a x #i . Prev(m, a, m+x) @i"
+
+restriction IsNum1: "not Ex a #i . IsNum(a) @i & (not Ex x y . a = x + y) & not (a = 1)"
+restriction IsNum2: "not Ex a b #i . IsNum(a + b) @i & (not Ex x y . a = x + y) & not (a = 1)"
+
+restriction NoDupes1: "not Ex x #i . NoDupes(x + x) @i"
+restriction NoDupes2: "not Ex x y #i . NoDupes(x + x + y) @i"
+
+
+// NormXorm
+// ==========
+
+// Do not allow attacker access to xorm function, since it will generate lots
+// of useless terms like `xorm(xorm(xorm(...)))`.  Both `secret` and
+// `xorm(secret)` are included in security lemmas. If the attacker can obtain
+// the secret in either form, they should win.
+functions: xorm/1 [private], unxorm/1 [private], trace_expr/0 [private]
+
+restriction NormXorm1: "All a b #i . NormXorm(a, b) @ i ==> a = b | (Ex x . a = b + x + x)"
+restriction NormXorm2: "not Ex input x y #i . (NormXorm(input, x + x + y) @ i)"
+restriction NormXorm3: "not Ex x b #i . NormXorm(x + x, b) @ i"
+
+restriction Normalized: "not Ex x y #i . (Normalized(x + x + y) @ i)"
+
+// Does not allow output to be same as input -- must learn a new expression.
+restriction ForwardNormXorm1: "All a b #i  . ForwardNormXorm(a, b) @ i ==> (Ex x . a = b + x + x)"
+restriction ForwardNormXorm2: "not Ex input x y #i . (ForwardNormXorm(input, x + x + y) @ i)"
+
+
+restriction StrictlyContains: "All a b #i . StrictlyContains(a, b) @i ==> (Ex z . a = z + b)"
+restriction Contains: "All a b #i . Contains(a, b) @i ==> (a = b | Ex z . a = z + b)"
+restriction NotContains: "All a b #i . NotContains(a, b) @i ==> (not a = b & not Ex z . a = z + b)"
+
+restriction Scope: "not Ex s1 s2 #i #j . Scope(s1) @i & Scope(s2) @j & not s1 = s2"
+
+
+// ###################### Begin NormXorm stuff ######################
+
+/* Uncomment to allow Tamarin to create its own !Anchor facts from !Target
+ * facts, and create !UsefulKnown facts from !Useful facts
+
+
+rule UsefulKnownNonTarget:
+    [ !Useful(scope, x1)
+    , !Target(scope, target)
+    , In(xorm(x1))
+    ]
+    --[ Scope(scope)
+      , NotContains(x1, target)
+      , Normalized(x1)
+      , Unique( <'UsefulKnownNonTarget', scope, x1> )
+    ]->
+    [ !UsefulKnown(scope, x1) ]
+
+rule UsefulKnown:
+    [ !UsefulUnknown(scope, x1)
+    , In(xorm(x1))
+    ]
+    --[ Scope(scope)
+      , Normalized(x1)
+      , Unique( <'UsefulKnownNonTarget', scope, x1> )
+    ]->
+    [ !UsefulKnown(scope, x1) ]
+
+rule CreateAnchor:
+    [ !Useful(scope, x1)
+    , !Target(scope, target)
+    , In(xorm(x1))
+    ]
+    --[ Scope(scope)
+      , Normalized(x1)
+      , StrictlyContains(x1, target)
+      , Unique( < 'CreateAnchor', scope, target, x1 > )
+    ]->
+    [ !Anchor(scope, target, <trace_expr, x1>, x1) ]
+*/
+
+rule KNormXormForwardProp:
+    // Only to be used with Singleton targets.
+    // You must only Anchor on attacker-known values.
+    // Useful things must be known to attacker.
+    [ !Anchor(scope, target, trace, x1)
+    , !UsefulKnown(scope, x2)
+    ]
+    --[ Unique(<'KNormXorm', trace + <trace_expr, x2>>)
+      , Normalized(x1)
+      , Normalized(x2)
+      , Scope(scope)
+      , StrictlyContains(x1, target)
+      , NotContains(trace, <trace_expr, x2>)
+      , ForwardNormXorm(x1 + x2, x3)
+      , Contains(x3, target)
+      //, Singleton(target)
+    ]->
+    [ !Anchor(scope, target, trace + <trace_expr, x2>, x3) ]
+
+rule AnchorOut:
+    [ !Anchor(scope, secret, trace, secret) ]
+    --[ Unique( <'AnchorOut', scope, secret> )
+    ]->
+    [ Out(xorm(secret)) ]
+
+// ###################### End of NormXorm stuff; Begin np1sec Theory ######################
+
+rule AuthOut:
+  [ !AO( A, x ) ] --> [ Out( x ) ]
+
+
+rule CreateGroup:
+    // Originally, this was two rules, one that generated a message and another
+    // for creating the $gid. However, this merely seems to have complicated
+    // the proof.
+    let
+        group_size = 1+1+1
+        q = < 'CreateGroup', $gid, group_size >
+    in
+    [ ]
+    --[ CreateGroup( $gid, group_size )
+      , Unique('CreateGroup')
+      , Unique( < 'CreateGroupGID', $gid >)
+      , GreaterThan(group_size, 1 + 1)   // min group size 3
+    ]->
+    [ !Group( $gid, group_size )
+    , Out(q)
+    ]
+
+
+/*
+    Round 1: publish ephemerals
+*/
+
+rule RoundOneStart1:
+    let
+        mesg = < 'StartParticipant', $gid, idx, $A >
+    in
+    [ !Group( $gid, group_size ) ]
+    --[ Unique(<'StartParticipantIdx', $gid, idx>)
+      , Unique(<'StartParticipantID', $gid, $A>)
+      , IsNum(idx)
+      , LessThan(idx, group_size + 1)
+    ]->
+    [ !AO($A, mesg)
+    , !StartParticipant($gid, idx, $A)
+    ]
+
+/*
+rule RoundOneStartOther:
+    let
+        //prev_mesg = < 'StartParticipant', $gid, left_idx, $left_agent >
+        my_idx = left_idx + 1
+        mesg = < 'StartParticipant', $gid, my_idx, $agent >
+    in
+    [ !Group( $gid, group_size )
+    //, !AO($left_agent, prev_mesg)
+    , !StartParticipant($gid, left_idx, $left_agent)
+    ]
+    --[ Unique(<'StartParticipantIdx', $gid, my_idx>)
+      , Unique(<'StartParticipantID', $gid, $A>)
+      , LessThan(my_idx, group_size + 1)
+    ]->
+    [ !AO($agent, mesg)
+    , !StartParticipant($gid, my_idx, $A)
+    ]
+*/
+
+rule IndividualSecrets:
+    let
+        q = < 'StartParticipant', $gid, idx, $A >
+        y = 'g'^~x
+    in
+    [ !Group( $gid, group_size )
+    //, !AO($A, q)
+    , !StartParticipant($gid, idx, $A)
+    , Fr( ~x )
+    ]
+    --[ Unique( <'Round1ActionId', $gid, $A > )
+      , Unique( <'Round1ActionIdx', $gid, idx > )
+      , Esk( $gid, idx, ~x )  // ephemeral secret key
+      , Eq(group_size, 1 + 1 + 1)
+      , LessThan(idx, group_size + 1)
+      , CompleteRoundOne( $gid, idx, $A )
+    ]->
+    [ !Pstate( $gid, idx, $A, ~x )
+    , !Pmap( $gid, idx, $A )
+    , !AO( $A, < 'Round1', $gid, idx, $A, xorm(y) > )
+    , !PubDH1( $gid, idx, $A, y )
+    ]
+
+
+rule PairwiseSecrets:
+    // Exchange pairwise shared secrets.
+    let
+        //m = group_size
+        //my_idx = succ(m, l_idx)
+        //l_idx = prev(m, my_idx)
+        //r_idx = succ(m, my_idx)
+        scope = <$gid, 'main'>
+        zl = yl^~x
+        zr = yr^~x
+        pub = zl + zr
+    in
+    [ !Group( $gid, group_size )
+    // Note that w/o authenticating DH pubkey, Tamarin will apply the attack
+    // where it puts 'g'^1 as a public key.
+
+    , !AO( $left_agent, < 'Round1', $gid, l_idx, $left_agent, xorm(yl) > )
+    , !AO( $right_agent, < 'Round1', $gid, r_idx, $right_agent, xorm(yr) > )
+
+    , !PubDH1( $gid, l_idx, $left_agent, yl )
+    , !Pstate( $gid, my_idx, $me, ~x)
+    , !PubDH1( $gid, r_idx, $right_agent, yr )
+    ]
+    --[ //CompleteRoundTwo( $gid, my_idx, $me )
+        Prev(group_size, my_idx, l_idx)
+      , Succ(group_size, my_idx, r_idx)
+      , LessThan(my_idx, group_size + 1)
+      , NormXorm(zl + zr, pub)
+      , Unique( <'PairwiseSecrets', $me> )
+      , Scope(scope)
+      , Unique( <'UsefulKnownNonTarget', scope, pub> )
+      , SecretLog(scope, zr, xorm(zr))
+    ]->
+    [
+    !AO( $me, < 'Round2', $gid, group_size, $me, xorm(pub) > )
+
+    // it would seem that zl will be covered by the previous participant,
+    // but for some reason the attack fails if you don't include zl as !UsefulUnknown.
+    , !UsefulUnknown(scope, zl)
+    , !UsefulUnknown(scope, zr)
+    , !UsefulKnown(scope, pub)
+    , !PubPairwiseXOR($gid, $me, pub)
+    , !PKRstate($gid, group_size, $me, zr)    // participant knowledge of their own right shared secret
+    , Out(xorm(pub))
+    , !PKRstateLog( scope, $gid, my_idx, $me, zl, zr, pub )
+    ]
+
+rule CreateTarget:
+    [
+      !PKRstateLog( scope, $gid, 1+1+1, $me, zl, secret, pub )
+    , !PKRstateLog( scope, $gid, 1, $right_agent, secret, zr, pub_2 )
+    ]
+    --[ Unique('CreateTarget')
+      , TargetLog(scope, $me, xorm(secret))
+      , Scope(scope)
+    ]->
+    [ !Anchor(scope, secret, <trace_expr, pub>, pub)
+    , !Anchor(scope, secret, <trace_expr, pub_2>, pub_2)
+    //, !Target(scope, secret)
+    ]
+
+rule LeakPairwiseSecret:
+    [
+      !PKRstateLog( scope, $gid, 1, $me, zl, secret, pub )  // TODO: why doesn't it work for 1+1?
+    ]
+    --[ LeakPairwiseSecret(scope, xorm(secret))
+      , Unique('LeakPairwiseSecret')
+    ]->
+    [ !UsefulKnown(scope, secret)
+    //, Out(xorm(secret))
+    ]
+
+
+rule StartGroupSecrets:
+    // RoundThree
+    // PKPGstate = Participant Knowledge of Partial Group key
+    [ !PKRstate( $gid, group_size, $me, my_right_shared_secret )
+    ]
+    --[ StartingGroupSecrets($gid, $me) ]->
+    [ PKPGstate( $gid, group_size, $me, $me, 1, my_right_shared_secret, my_right_shared_secret ) ]
+
+
+rule GroupSecrets:
+    let
+        contrib = < 'Round2', $gid, group_size, $them, xorm(their_xor_contrib) >
+        // their_idx = succ(group_size, their_left_idx)
+        // their_left_idx = prev(group_size, their_idx)
+    in
+    [ PKPGstate($gid, group_size, $me, $their_left, count, their_left_DH_secret, partial_gkey)
+    , !AO( $them, contrib )
+
+    /*
+    // Simulate confirmation of DH secrets (could be done via AEAD)
+    , !PKRstate( $gid, group_size, $them, their_right_DH_secret )
+    , !PKRstate( $gid, group_size, $their_left, their_left_DH_secret )
+    */
+
+    , !Pmap( $gid, their_idx, $them )
+    , !Pmap( $gid, their_left_idx, $their_left )
+    ]
+    --[ BuildingGroupKey($gid, $me, count)
+      , Contains(partial_gkey, their_left_DH_secret)
+      , LessThan(count, group_size)
+      , Normalized(their_left_DH_secret)
+      , Normalized(their_xor_contrib)
+      , NoDupes(partial_gkey)
+      , NormXorm(their_left_DH_secret + their_xor_contrib, their_right_DH_secret)
+      , Unique(<'GroupSecrets', $me, $them>)
+      , Prev(group_size, their_idx, their_left_idx)
+    ]->
+    [ PKPGstate( $gid, group_size, $me, $them, count + 1,
+                 their_right_DH_secret,
+                 partial_gkey + their_right_DH_secret)
+    ]
+
+
+rule FinishGroupKey:
+    // PKGstate = Participant Knowledge of Group key
+    [ PKPGstate( $gid, group_size, $me, $them, group_size, running_secret, gkey )
+    ]
+    --[ Finished( $gid, $me, gkey ), NoDupes(gkey) ]->
+    [ !PKGstate( $gid, $me, gkey )
+    ]
+
+
+lemma CreateGroup:
+    exists-trace
+    "Ex gid group_size #t1 .
+        CreateGroup( gid, group_size ) @ t1
+        & group_size = 1+1+1
+        & not group_size = 1+1
+    "
+
+
+lemma CompleteRoundOne_Any:
+    exists-trace
+    "Ex gid A1 idx #t1 .
+        CompleteRoundOne( gid, idx, A1 ) @ t1
+    "
+
+
+lemma CompleteRoundOne_All:
+    exists-trace
+    "Ex gid A1 A2 A3 #t1 #t2 #t3 .
+        CompleteRoundOne( gid, 1, A1 ) @ t1
+        & CompleteRoundOne( gid, 1+1, A2 ) @ t2
+        & CompleteRoundOne( gid, 1+1+1, A3 ) @ t3
+        & not (A1 = A2)
+        & not (A1 = A3)
+        & not (A2 = A3)
+    "
+
+/*
+lemma CompleteRoundTwo:
+    exists-trace
+    "Ex gid A1 idx #t1 .
+        CompleteRoundTwo( gid, idx, A1 ) @ t1
+    "
+*/
+// debug -- limit tamarin's considerations
+//restriction Finished: "All gid A1 #i . Finished(gid, A1) @i ==> Ex #j . CompleteRoundThree(gid, A1) @j & i < j"
+//restriction BuildingGroupKey1: "All gid A1 #i . BuildingGroupKey(gid, A1, 1 + 1) @i ==> Ex #j . StartingGroupKey(gid, A1) @j & j < i"
+//restriction BuildingGroupKey2: "All gid A1 count #i . BuildingGroupKey(gid, A1, count + 1 + 1) @i ==> Ex #j . BuildingGroupKey(gid, A1, count + 1) @j & j < i"
+
+lemma Finished1:
+    exists-trace
+    "Ex gid A1 key #t1 .
+        Finished(gid, A1, key) @ t1
+    "
+
+lemma Finished:
+    exists-trace
+    "Ex gid key A1 A2 A3 #t1 #t2 #t3 .
+        Finished(gid, A1, key) @ t1
+        & Finished(gid, A2, key) @ t2
+        & Finished(gid, A3, key) @ t3
+        & not (A1 = A2)
+        & not (A1 = A3)
+        & not (A2 = A3)
+    "
+
+
+lemma NoLeakTarget:
+    all-traces
+    "not Ex scope A secret1 #i #k .
+        TargetLog(scope, A, secret1) @i
+        & K(secret1) @k
+        & not (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k)
+    "
+
+lemma LeakConditionTarget:
+    all-traces
+    "All scope A secret1 #i #k .
+        TargetLog(scope, A, secret1) @i & K(secret1) @k
+        ==> (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k)
+    "
+
+lemma LeakTarget:
+    exists-trace
+    "Ex scope A xorm_secret #i #k .
+        TargetLog(scope, A, xorm_secret) @i
+        & K(xorm_secret) @k
+        //& not (Ex #l . LeakPairwiseSecret(scope, xorm_secret) @l)
+        //& (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k & not secret2 = secret)
+    "
+
+lemma NoLeakAllSecretsXorm:
+    all-traces
+    "not Ex scope secret xorm_secret #i #k .
+        SecretLog(scope, secret, xorm_secret) @i
+        & K(xorm_secret) @k
+        & not (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k)
+    "
+
+lemma NoLeakAllSecretsBare:
+    all-traces
+    "not Ex scope secret xorm_secret #i #k .
+        SecretLog(scope, secret, xorm_secret) @i
+        & K(secret) @k
+        & not (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k)
+    "
+
+lemma LeakConditionXorm:
+    all-traces
+    "All scope secret xorm_secret #i #k .
+        SecretLog(scope, secret, xorm_secret) @i & K(xorm_secret) @k
+        ==> (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k)
+    "
+
+lemma LeakConditionBare:
+    all-traces
+    "All scope secret xorm_secret #i #k .
+        SecretLog(scope, secret, xorm_secret) @i & K(secret) @k
+        ==> (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k)
+    "
+
+
+lemma LeakXorm:
+    exists-trace
+    "Ex scope secret xorm_secret #i #k .
+        SecretLog(scope, secret, xorm_secret) @i
+        & K(xorm_secret) @k
+        & not (Ex #l . LeakPairwiseSecret(scope, xorm_secret) @l)
+        //& (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k & not secret2 = secret)
+    "
+
+lemma LeakBare:
+    // fails (it's supposed to)
+    exists-trace
+    "Ex scope secret xorm_secret #i #k .
+        SecretLog(scope, secret, xorm_secret) @i
+        & K(secret) @k
+        & not (Ex #l . LeakPairwiseSecret(scope, xorm_secret) @l)
+        //& (Ex secret2 #l . LeakPairwiseSecret(scope, secret2) @l & l < k & not secret2 = secret)
+    "
+
+
+
+end

@@ -1,0 +1,349 @@
+/*
+
+Attempt to implement xor logic using trace restrictions
+
+Note that K(x) ==> K(xorm(x)), so if xorm(x) is secret, then x is secret.
+
+Cheating on xor expansion -- only let attacker expand with terms that participants have used.
+The human is responsible for proving that terms that the attacker makes up themselves will
+have no use in any attack. (See Useful.)
+
+
+# IMPORTANT NOTE:
+
+I ignore Xor expressions that would be zero, since that is a useless result.
+Any nonzero expression you could build that has a zero subexpression can be
+built without that subexpression. 
+
+
+# Most Useful results
+
+Lemmas TestSecrecy1a and TestSecrecy2a are the most general and useful results. They
+let Tamarin generate xors WLOG, in the case where the target is a single DH
+secret, and where the human has annotated useful terms and the target secret.
+
+Lemmas TestSecrecyManualAnchor1 and TestSecrecyManualAnchor2 manually fill in
+the step of generating `!Anchor` and `!UsefulKnown`facts for Tamarin.
+
+*/
+
+theory NormXormUsefulNozero
+begin
+
+builtins: multiset, diffie-hellman
+
+functions: xorm/1 [private], unxorm/1 [private], trace_expr/0 [private]
+
+restriction Unique: "All x #i #j. Unique(x) @ #i & Unique(x) @ #j ==> #i = #j"
+
+// Does not allow a or b to be zero
+restriction NormXorm1: "All a b #i . NormXorm(a, b) @ i ==> a = b | (Ex x . a = b + x + x)"
+restriction NormXorm2: "not Ex input x y #i . (NormXorm(input, x + x + y) @ i)"
+restriction NormXorm3: "not Ex x b #i . NormXorm(x + x, b) @ i"
+
+restriction Normalized: "not Ex x y #i . (Normalized(x + x + y) @ i)"
+
+
+// Does not allow output to be same as input -- must learn a new expression.
+restriction ForwardNormXorm1: "All a b #i  . ForwardNormXorm(a, b) @ i ==> (Ex x . a = b + x + x)"
+restriction ForwardNormXorm2: "not Ex input x y #i . (ForwardNormXorm(input, x + x + y) @ i)"
+
+
+restriction IncreasingNormXorm1: "not Ex x y #i . IncreasingNormXorm(x + x + y) @ i"
+restriction IncreasingNormXorm2: "not Ex x #i   . IncreasingNormXorm(x + x) @ i"
+
+restriction StrictlyContains: "All a b #i . StrictlyContains(a, b) @i ==> (Ex z . a = z + b)"
+restriction Contains: "All a b #i . Contains(a, b) @i ==> (a = b | Ex z . a = z + b)"
+restriction NotContains: "All a b #i . NotContains(a, b) @i ==> (not a = b & not Ex z . a = z + b)"
+restriction Overlaps: "All a b #i . Overlaps(a, b) @i ==> (a = b | Ex x y z . a = x + z & b = y + z)"
+restriction Singleton: "not Ex x y #i . Singleton(x + y) @i"
+
+
+restriction Equality: "All x y #i. Eq(x, y) @ #i ==> x = y"
+restriction Inequality: "All x #i. Neq(x,x) @ #i ==> F" 
+
+restriction Scope: "not Ex s1 s2 #i #j . Scope(s1) @i & Scope(s2) @j & not s1 = s2"
+
+
+// prioritize this rule
+
+rule KNormXormCheap:
+    let 
+        ix1 = xorm(x1)
+        ix2 = xorm(x2)
+    in
+    [ In(xorm(x1)), In(xorm(x2))
+    , !Secret(scope, x3), !Useful(scope, x1), !Useful(scope, x2)
+    ]
+    --[ NotZero(x1), NotZero(x2)
+      , ForwardNormXorm(x1 + x2, x3)
+      , Unique(<'KNormXorm', x3>)
+    ]->
+    [ Out(xorm(x3)) ]
+
+/*
+rule KNormXorm2b:
+    [ In(xorm(x1)), In(xorm(x2)) ]
+    --[ NotZero(x1), NotZero(x2), DecreasingNormXorm(x1 + x2, x3)
+      , Unique(<'KNormXorm', x3>)
+    ]->
+    [ Out(xorm(x3)) ]
+*/
+
+rule KNormXormBackChain:
+    let 
+        ix1 = xorm(x1)
+        ix2 = xorm(x2)
+    in
+    [ In(xorm(x1)), In(xorm(x2))
+    , !Useful(scope, x1)
+    , !Useful(scope, x2)
+    ]
+    --[ ForwardNormXorm(x1 + x2, x3)
+      , Unique(<'KNormXorm', x3>)
+      , BackChain()
+    ]->
+    [ Out(xorm(x3)) ]
+
+
+rule UsefulKnownNonTarget:
+    [ !Useful(scope, x1), !Target(scope, target), In(xorm(x1)) ] --[ Scope(scope), NotContains(x1, target), Unique( <'UsefulKnownNonTarget', scope, x1> ) ]-> [ !UsefulKnown(scope, x1) ]
+
+
+rule CreateAnchor:
+    [ !Useful(scope, x1)
+    , !Target(scope, target)
+    , In(xorm(x1))
+    ] 
+    --[ Scope(scope)
+      , StrictlyContains(x1, target)
+      , Unique( < 'CreateAnchor', scope, target, x1 > ) 
+    ]->
+    [ !Anchor(scope, target, <trace_expr, x1>, x1) ]
+
+
+rule KNormXormForwardProp:
+    // Only to be used with Singleton targets.
+    // You must only Anchor on attacker-known values.
+    // Useful things must be known to attacker.
+    let 
+        ix1 = xorm(x1)
+        ix2 = xorm(x2)
+    in
+    [ !Anchor(scope, target, trace, x1)
+    , !UsefulKnown(scope, x2)
+    ]
+    --[ 
+        Unique(<'KNormXorm', trace + <trace_expr, x2>>)
+      , Normalized(x1)
+      , Normalized(x2)
+      , Scope(scope)
+      , StrictlyContains(x1, target)
+      , ForwardNormXorm(x1 + x2, x3)
+      , Contains(x3, target)
+      //, Singleton(target)
+    ]->
+    [ !Anchor(scope, target, trace + <trace_expr, x2>, x3) ]
+
+
+rule AnchorOut:
+    [ !Anchor(scope, target, trace, target) ] --[ Unique( <'AnchorOut', scope, target> ) ]-> [ Out(xorm(target)) ]
+    
+
+
+/*
+// don't need if you always use NormXorm to calculate xors.
+
+rule KNormXorm1:
+    [ In(xorm(orig)) ] --[ NormXorm(orig, normed) ]-> [ Out(xorm(normed)) ]
+
+
+// don't need if you always state secrecy requirement of a secret s in terms of xorm(s).
+rule KXorm1:
+    [ In(xorm(x)) ] --[ Singleton(x) ]-> [ Out(x) ]
+*/
+
+
+/* ================================================== *
+ * Testing                                            *
+ * ================================================== */
+
+
+rule TestNormXorm1:
+    // TODO: try different orderings
+    // Based on: xorm('a' + 'a' + 'x')
+    [ ]
+    --[ NormXorm('a' + 'a' + 'x', x)
+      , TestingNormXorm1( x )
+    ]->
+    [ ]
+
+lemma TestNormXorm1:
+    exists-trace
+    "Ex a #i . TestingNormXorm1( a ) @ i & a = 'x'"
+
+
+//--------------------------------------------------
+
+rule TestNormXorm2:
+    // TODO: try different orderings
+    // Based on: xorm(xorm('k1' + xorm('k1' + 'k2')) + xorm('k2' + 'k3'))
+    [ ]
+    --[ NormXorm('k1' + 'k2', k12)
+      , NormXorm('k2' + 'g'^'k3', k23)
+      , NormXorm('k1' + k12, k2)
+      , NormXorm(k2 + k23, k3)
+      , TestingNormXorm2( k3, 'g'^'k3' )
+    ]->
+    [ ]
+
+lemma TestNormXorm2:
+    exists-trace
+    "Ex actual expected #i . TestingNormXorm2( actual, expected ) @ i & actual = expected"
+
+
+//--------------------------------------------------
+
+rule TestNormXorm3:
+    [ ]
+    --[ NormXorm( 'k1' + 'k1' + 'k2' + 'k3' + 'k2',  a )
+      , TestingNormXorm3( a )
+    ]-> [ ]
+
+lemma TestNormXorm3:
+    exists-trace
+    "Ex a #i . TestingNormXorm3( a ) @ i & a = 'k3'"
+
+lemma TestNormXormAll3:
+    all-traces
+    "All a #i . TestingNormXorm3( a ) @ i ==> a = 'k3'"
+
+//--------------------------------------------------
+
+rule TestSecrecyManualAnchor1:
+    let
+        // x1, x2 are the products of two private DH keys. The product is the shared secret.
+        y1 = 'g'^~x1
+        y2 = 'g'^~x2
+        useful_scope = 'test_manual_anchor_1_scope'
+    in
+    [ Fr(~x1), Fr(~x2) ]
+    --[ TestingSecrecyManualAnchor1($A, xorm(y1), xorm(y2), xorm(pub)), NormXorm(y1 + y2, pub)
+      , Unique( 'TestSecrecyManualAnchor1' )
+      , Scope( useful_scope )
+    ]->
+    [ Out( xorm(pub) )
+    , !Useful(useful_scope, y1), !Useful(useful_scope, y2)
+    , !Target(useful_scope, y1)
+    , !Anchor(useful_scope, y1, <trace_expr, pub>, pub), !Anchor(useful_scope, y2, <trace_expr, pub>, pub)
+    ]
+
+
+lemma TestSecrecyManualAnchor1a:
+    all-traces
+    "All A s1 s2 x_pub #i . TestingSecrecyManualAnchor1(A, s1, s2, x_pub) @ i ==> (not Ex #j . K(s1) @ j) & (not Ex #k . K(s2) @ k)
+    "
+
+//--------------------------------------------------
+
+rule TestSecrecy1:
+    let
+        // x1, x2 are the products of two private DH keys. The product is the shared secret.
+        y1 = 'g'^~x1
+        y2 = 'g'^~x2
+        useful_scope = 'test1_scope'
+    in
+    [ Fr(~x1), Fr(~x2) ]
+    --[ TestingSecrecy1($A, xorm(y1), xorm(y2), xorm(pub)), NormXorm(y1 + y2, pub)
+      , Unique( 'TestSecrecy1' )
+      , Scope( useful_scope )
+    ]->
+    [ Out( xorm(pub) )
+    , !Useful(useful_scope, y1), !Useful(useful_scope, y2), !Useful(useful_scope, pub)
+    , !Target(useful_scope, y1), !Target(useful_scope, y2)
+    ]
+
+
+lemma TestSecrecy1a:
+    all-traces
+    "All A s1 s2 x_pub #i . TestingSecrecy1(A, s1, s2, x_pub) @ i ==> (not Ex #j . K(s1) @ j) & (not Ex #k . K(s2) @ k)
+    "
+
+lemma TestSecrecy1b:
+    // fails
+    all-traces
+    "All A s1 s2 x_pub #i . TestingSecrecy1(A, s1, s2, x_pub) @ i ==> (Ex #j . K(x_pub) @ j & i < j)
+    "
+
+lemma TestSecrecy1c:
+    exists-trace
+    "Ex A s1 s2 x_pub #i #j . TestingSecrecy1(A, s1, s2, x_pub) @ i & K(x_pub) @ j & i < j
+    "
+
+
+// --------------------------------------------------
+
+rule TestSecrecyManualAnchor2:
+    // Reveal one of the DH secrets. Attacker should be able to get the other DH secret.
+    let
+        // x1, x2 are the products of two private DH keys. The product is the shared secret.
+        y1 = 'g'^~x1
+        y2 = 'g'^~x2
+        useful_scope = 'test2_scope_manual_anchor'
+    in
+    [ Fr(~x1), Fr(~x2) ]
+    --[ TestingSecrecy2ManualAnchor(useful_scope, $A, xorm(y1), xorm(y2), xorm(pub)), NormXorm(y1 + y2, pub)
+      , Scope( useful_scope )
+      , Unique( 'TestSecrecyManualAnchor2' )
+    ]->
+    [ Out( xorm(pub) ), Out( xorm(y2) )
+    , !UsefulKnown(useful_scope, y2)
+    , !Anchor(useful_scope, y1, <trace_expr, pub>, pub)
+    ]
+
+
+lemma TestSecrecyManualAnchor2:
+    exists-trace
+    "Ex scope A s1 s2 x_pub #i #j . TestingSecrecy2ManualAnchor(scope, A, s1, s2, x_pub) @ i & K(s1) @ j & i < j & (not Ex #k . BackChain() @k)
+    "
+
+
+// --------------------------------------------------
+
+rule TestSecrecy2:
+    // Reveal one of the DH secrets. Attacker should be able to get the other DH secret.
+    let
+        // x1, x2 are the products of two private DH keys. The product is the shared secret.
+        y1 = 'g'^~x1
+        y2 = 'g'^~x2
+        useful_scope = 'test2_scope'
+    in
+    [ Fr(~x1), Fr(~x2) ]
+    --[ TestingSecrecy2(useful_scope, $A, xorm(y1), xorm(y2), xorm(pub)), NormXorm(y1 + y2, pub)
+      //, DeclareUseful(useful_scope, y1), DeclareUseful(useful_scope, y2), DeclareUseful(useful_scope, pub)
+      , Scope( useful_scope )
+      , Unique( 'TestSecrecy2' )
+      //, Unique($useful_scope)
+    ]->
+    [ Out( xorm(pub) ), Out( xorm(y2) )
+    , !Useful(useful_scope, y1), !Useful(useful_scope, y2)
+    //, !Anchor(useful_scope, y1, <trace_expr, pub>, pub)
+    , !Useful(useful_scope, pub), !Target(useful_scope, y1)
+    ]
+
+
+lemma TestSecrecy2a:
+    exists-trace
+    "Ex scope A s1 s2 x_pub #i #j . TestingSecrecy2(scope, A, s1, s2, x_pub) @ i & K(s1) @ j & i < j & (not Ex #k . BackChain() @k)
+    "
+
+// --------------------------------------------------
+
+rule TestZero1: [ ] --[ NormXorm('a' + 'a', a), TestingZero1(a) ]-> [ ]
+
+lemma TestZero1:
+    all-traces
+    "not Ex a #i . TestingZero1( a ) @ i"
+
+
+end

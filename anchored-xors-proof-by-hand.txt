@@ -1,0 +1,102 @@
+# Anchored Xors Method -- Proof by Hand
+
+This document explains and attempts to prove the "Anchored Xors" method for
+searching for an Xor expressions that reveals a target secret. The method should
+be sound and complete; that is, if the method finds the secret, the secret
+should be actually discoverable, and if the secret can be found by Xoring
+various known values together, then the method should find it. The method should
+also terminate for a finite number of initial known terms.
+
+Note that the attacker is not allowed to generate its own terms because all
+
+This method was developed to restrict the search of the Tamarin attacker for
+attacks on the confidentiality of a secret so that the search would terminate.
+
+
+Construction Rules
+===================
+
+Suppose we have a set[^set] representing the leaves in an AST where each
+operation is an Xor. We want to prove that for any tree whose result is a
+singleton secret, such that singleton secret appears at most only once in the
+leaves, there exists an reordering of operations where the subexpressions after
+each application of Xor always have the singleton secret in them. Due to
+commutivity and associativity, we may arbitrarily reorder operations in the AST
+while maintaining the same result. NB by "containing the secret" I mean that a
+leaf was created from Xoring a secret value with some other value. By "singleton
+secret" I mean a secret that in the protocol is not generated from Xoring
+together previously generated values.
+
+Note that it is easy to reduce the case where the secret appears in multiple
+leaves to the case where it appears in only in one case. We can simply xor
+together all leaves with the secret and put the result in a new tree as a leaf.
+NB the singleton secret must appear an odd number of times. In (n+1)sec we only
+start with two leaves known to the attacker containing any particular target
+secret, and therefore we do not need to consider Xor trees with multiple leaves
+containing the target secret.
+
+The reduction process is defined in the following pseudocode:
+
+    new_leaves = union(
+        set(leaf for leaf in leaves if secret not in leaf), 
+        set([xor(leaf for leaf in leaves if secret in leaf)]))
+
+    assert count(lambda leaf: secret in leaf, new_leaves) = 1
+
+where `leaves` are the leaves in the original tree.
+
+
+The following figure illustrates how we can always pick the leaf `An[0]`
+containing the secret `s` and build the tree with that as the lowest leaf.
+
+            s
+            |
+            +
+           / \
+          +   L[2]
+         / \
+        +   L[1]
+       / \
+      /   L[0]
+    An[0]
+
+Each `An[i]` is an "anchor" expression containing the secret, `An[0]` is the
+"initial" anchor expression, and `L[i]` are leaves not containing the secret. We
+build the expression tree `An[i+1] = xor(An[i], L[i])` where `An[i]` is the ith
+subexpression, `An[0]` is the leaf containing the secret, and `L[i]` is the leaf
+to be xored with `An[i]` to get the next subexpression. For example, `An[3] =
+xor(xor(xor(An[0], An[0]), L[1]), L[2])`. It is easy to exptrapolate this to any
+number of intermediate terms by induction. NB each `L[i]` does not contain the
+secret.
+
+
+[^set]: We can use a set WLOG because if the same value `x` appears multiple
+    times as different leaves, the xor of all these equivalent leaves reduces to
+    either 0 or the value `x`.
+
+
+
+Ordering Lemma
+===============
+
+There is an ordering of operations such that every subexpression `A[i+1]` where 
+`0 <= i < i_max` is made by combining the subexpression `An[i]` containing the secret
+and a leaf that overlaps `An[i]`.
+
+Proof:
+
+For every subexpression `An[i]`, `i < i_max`, ignore the previously used leaves.
+Since the final simplified expression must contain only the secret, there must
+be a remaining leaf that overlaps `An[i]`, otherwise we would not be able to
+extract the secret at the end. Pick that as the next leaf to xor with `An[i]` in
+order to obtain `An[i+1]`.
+
+
+Conclusion
+===========
+
+This means we can limit the search over xors by starting with a set of known
+expressions containing the secret (the "initial anchors"), xoring them together,
+then building new "anchor" expressions by choosing from the expressions not
+containing the secret but having an overlap with the current subexpression
+containing the secret.

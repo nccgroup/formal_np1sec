@@ -1,0 +1,4300 @@
+theory GKEP_3_normxorm_simplified_cleaned begin
+
+// Function signature and definition of the equational theory E
+
+builtins: diffie-hellman, multiset
+functions: fst/1, pair/2, snd/1, trace_expr/0 [private],
+           unxorm/1 [private], xorm/1 [private]
+equations: fst(<x.1, x.2>) = x.1, snd(<x.1, x.2>) = x.2
+
+restriction Unique:
+  "∀ x #i #j. ((Unique( x ) @ #i) ∧ (Unique( x ) @ #j)) ⇒ (#i = #j)"
+  // safety formula
+
+restriction Equality:
+  "∀ x y #i. (Eq( x, y ) @ #i) ⇒ (x = y)"
+  // safety formula
+
+restriction Inequality:
+  "∀ x #i. (Neq( x, x ) @ #i) ⇒ (⊥)"
+  // safety formula
+
+restriction LessThan:
+  "∀ x y #i. (LessThan( x, y ) @ #i) ⇒ (∃ z. (x+z) = y)"
+
+restriction GreaterThan:
+  "∀ x y #i. (GreaterThan( x, y ) @ #i) ⇒ (∃ z. x = (y+z))"
+
+restriction CompleteRoundTwo:
+  "∀ gid idx A #i.
+    (CompleteRoundTwo( gid, idx, A ) @ #i) ⇒
+    (∃ #j. (CompleteRoundOne( gid, idx, A ) @ #j) ∧ (#j < #i))"
+
+restriction Succ1:
+  "∀ m a result #i.
+    (Succ( m, a, result ) @ #i) ⇒
+    (((¬(m = a)) ∧ (result = (a+one))) ∨ ((m = a) ∧ (result = one)))"
+  // safety formula
+
+restriction Succ2:
+  "¬(∃ m x result #i. Succ( m, (m+x), result ) @ #i)"
+  // safety formula
+
+restriction Succ3:
+  "¬(∃ m a x #i. Succ( m, a, (m+x) ) @ #i)"
+  // safety formula
+
+restriction Prev1:
+  "∀ m a result #i.
+    (Prev( m, a, result ) @ #i) ⇒
+    (((a = one) ∧ (result = m)) ∨ (∃ x. (a = (x+one)) ∧ (result = x)))"
+
+restriction Prev2:
+  "¬(∃ m x result #i. Prev( m, (m+x), result ) @ #i)"
+  // safety formula
+
+restriction Prev3:
+  "¬(∃ m a x #i. Prev( m, a, (m+x) ) @ #i)"
+  // safety formula
+
+restriction IsNum1:
+  "¬(∃ a #i.
+      ((IsNum( a ) @ #i) ∧ (¬(∃ x y. a = (x+y)))) ∧ (¬(a = one)))"
+
+restriction IsNum2:
+  "¬(∃ a b #i.
+      ((IsNum( (a+b) ) @ #i) ∧ (¬(∃ x y. a = (x+y)))) ∧ (¬(a = one)))"
+
+restriction NoDupes1:
+  "¬(∃ x #i. NoDupes( (x+x) ) @ #i)"
+  // safety formula
+
+restriction NoDupes2:
+  "¬(∃ x y #i. NoDupes( (x+x+y) ) @ #i)"
+  // safety formula
+
+restriction NormXorm1:
+  "∀ a b #i.
+    (NormXorm( a, b ) @ #i) ⇒ ((a = b) ∨ (∃ x. a = (b+x+x)))"
+
+restriction NormXorm2:
+  "¬(∃ input x y #i. NormXorm( input, (x+x+y) ) @ #i)"
+  // safety formula
+
+restriction NormXorm3:
+  "¬(∃ x b #i. NormXorm( (x+x), b ) @ #i)"
+  // safety formula
+
+restriction Normalized:
+  "¬(∃ x y #i. Normalized( (x+x+y) ) @ #i)"
+  // safety formula
+
+restriction ForwardNormXorm1:
+  "∀ a b #i. (ForwardNormXorm( a, b ) @ #i) ⇒ (∃ x. a = (b+x+x))"
+
+restriction ForwardNormXorm2:
+  "¬(∃ input x y #i. ForwardNormXorm( input, (x+x+y) ) @ #i)"
+  // safety formula
+
+restriction StrictlyContains:
+  "∀ a b #i. (StrictlyContains( a, b ) @ #i) ⇒ (∃ z. a = (b+z))"
+
+restriction Contains:
+  "∀ a b #i. (Contains( a, b ) @ #i) ⇒ ((a = b) ∨ (∃ z. a = (b+z)))"
+
+restriction NotContains:
+  "∀ a b #i.
+    (NotContains( a, b ) @ #i) ⇒ ((¬(a = b)) ∧ (¬(∃ z. a = (b+z))))"
+  // safety formula
+
+restriction Scope:
+  "¬(∃ s1 s2 #i #j.
+      ((Scope( s1 ) @ #i) ∧ (Scope( s2 ) @ #j)) ∧ (¬(s1 = s2)))"
+  // safety formula
+
+rule (modulo E) KNormXormForwardProp:
+   [ !Anchor( scope, target, trace, x1 ), !UsefulKnown( scope, x2 ) ]
+  --[
+  Unique( <'KNormXorm', (trace+<trace_expr, x2>)> ),
+  Normalized( x1 ), Normalized( x2 ), Scope( scope ),
+  StrictlyContains( x1, target ),
+  NotContains( trace, <trace_expr, x2> ),
+  ForwardNormXorm( (x1+x2), x3 ), Contains( x3, target )
+  ]->
+   [ !Anchor( scope, target, (trace+<trace_expr, x2>), x3 ) ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AnchorOut:
+   [ !Anchor( scope, secret, trace, secret ) ]
+  --[ Unique( <'AnchorOut', scope, secret> ) ]->
+   [ Out( xorm(secret) ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) AuthOut:
+   [ !AO( A, x ) ] --> [ Out( x ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) CreateGroup:
+   [ ]
+  --[
+  CreateGroup( $gid, (one+one+one) ), Unique( 'CreateGroup' ),
+  Unique( <'CreateGroupGID', $gid> ),
+  GreaterThan( (one+one+one), (one+one) )
+  ]->
+   [
+   !Group( $gid, (one+one+one) ),
+   Out( <'CreateGroup', $gid, (one+one+one)> )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) RoundOneStart1:
+   [ !Group( $gid, group_size ) ]
+  --[
+  Unique( <'StartParticipantIdx', $gid, idx> ),
+  Unique( <'StartParticipantID', $gid, $A> ), IsNum( idx ),
+  LessThan( idx, (group_size+one) )
+  ]->
+   [
+   !AO( $A, <'StartParticipant', $gid, idx, $A> ),
+   !StartParticipant( $gid, idx, $A )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) IndividualSecrets:
+   [
+   !Group( $gid, group_size ), !StartParticipant( $gid, idx, $A ),
+   Fr( ~x )
+   ]
+  --[
+  Unique( <'Round1ActionId', $gid, $A> ),
+  Unique( <'Round1ActionIdx', $gid, idx> ), Esk( $gid, idx, ~x ),
+  Eq( group_size, (one+one+one) ), LessThan( idx, (group_size+one) ),
+  CompleteRoundOne( $gid, idx, $A )
+  ]->
+   [
+   !Pstate( $gid, idx, $A, ~x ), !Pmap( $gid, idx, $A ),
+   !AO( $A, <'Round1', $gid, idx, $A, xorm('g'^~x)> ),
+   !PubDH1( $gid, idx, $A, 'g'^~x )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) PairwiseSecrets:
+   [
+   !Group( $gid, group_size ),
+   !AO( $left_agent, <'Round1', $gid, l_idx, $left_agent, xorm(yl)> ),
+   !AO( $right_agent, <'Round1', $gid, r_idx, $right_agent, xorm(yr)>
+   ),
+   !PubDH1( $gid, l_idx, $left_agent, yl ),
+   !Pstate( $gid, my_idx, $me, ~x ),
+   !PubDH1( $gid, r_idx, $right_agent, yr )
+   ]
+  --[
+  Prev( group_size, my_idx, l_idx ),
+  Succ( group_size, my_idx, r_idx ),
+  LessThan( my_idx, (group_size+one) ),
+  NormXorm( (yl^~x+yr^~x), (yl^~x+yr^~x) ),
+  Unique( <'PairwiseSecrets', $me> ), Scope( <$gid, 'main'> ),
+  Unique( <'UsefulKnownNonTarget', <$gid, 'main'>, (yl^~x+yr^~x)> ),
+  SecretLog( <$gid, 'main'>, yr^~x, xorm(yr^~x) )
+  ]->
+   [
+   !AO( $me, <'Round2', $gid, group_size, $me, xorm((yl^~x+yr^~x))> ),
+   !UsefulUnknown( <$gid, 'main'>, yl^~x ),
+   !UsefulUnknown( <$gid, 'main'>, yr^~x ),
+   !UsefulKnown( <$gid, 'main'>, (yl^~x+yr^~x) ),
+   !PubPairwiseXOR( $gid, $me, (yl^~x+yr^~x) ),
+   !PKRstate( $gid, group_size, $me, yr^~x ),
+   Out( xorm((yl^~x+yr^~x)) ),
+   !PKRstateLog( <$gid, 'main'>, $gid, my_idx, $me, yl^~x, yr^~x,
+                 (yl^~x+yr^~x)
+   )
+   ]
+
+  /*
+  rule (modulo AC) PairwiseSecrets:
+     [
+     !Group( $gid, group_size ),
+     !AO( $left_agent, <'Round1', $gid, l_idx, $left_agent, xorm(yl)> ),
+     !AO( $right_agent, <'Round1', $gid, r_idx, $right_agent, xorm(yr)>
+     ),
+     !PubDH1( $gid, l_idx, $left_agent, yl ),
+     !Pstate( $gid, my_idx, $me, ~x ),
+     !PubDH1( $gid, r_idx, $right_agent, yr )
+     ]
+    --[
+    Prev( group_size, my_idx, l_idx ),
+    Succ( group_size, my_idx, r_idx ),
+    LessThan( my_idx, (group_size+one) ), NormXorm( (z+z.1), (z+z.1) ),
+    Unique( <'PairwiseSecrets', $me> ), Scope( <$gid, 'main'> ),
+    Unique( <'UsefulKnownNonTarget', <$gid, 'main'>, (z+z.1)> ),
+    SecretLog( <$gid, 'main'>, z.1, xorm(z.1) )
+    ]->
+     [
+     !AO( $me, <'Round2', $gid, group_size, $me, xorm((z+z.1))> ),
+     !UsefulUnknown( <$gid, 'main'>, z ),
+     !UsefulUnknown( <$gid, 'main'>, z.1 ),
+     !UsefulKnown( <$gid, 'main'>, (z+z.1) ),
+     !PubPairwiseXOR( $gid, $me, (z+z.1) ),
+     !PKRstate( $gid, group_size, $me, z.1 ), Out( xorm((z+z.1)) ),
+     !PKRstateLog( <$gid, 'main'>, $gid, my_idx, $me, z, z.1, (z+z.1) )
+     ]
+    variants (modulo AC)
+     1. ~x    = ~x.23
+        yl    = yl.28
+        yr    = yr.29
+        z     = yl.28^~x.23
+        z.1   = yr.29^~x.23
+    
+     2. ~x    = ~x.26
+        yl    = z.35^inv(~x.26)
+        yr    = yr.32
+        z     = z.35
+        z.1   = yr.32^~x.26
+    
+     3. ~x    = ~x.27
+        yl    = yl.32
+        yr    = z.37^inv(~x.27)
+        z     = yl.32^~x.27
+        z.1   = z.37
+    
+     4. ~x    = ~x.27
+        yl    = z.36^inv(~x.27)
+        yr    = z.37^inv(~x.27)
+        z     = z.36
+        z.1   = z.37
+    
+     5. ~x    = ~x.74
+        yl    = yl.79
+        yr    = x.141^x.142
+        z     = yl.79^~x.74
+        z.1   = x.141^(~x.74*x.142)
+    
+     6. ~x    = ~x.74
+        yl    = x.141^x.142
+        yr    = yr.80
+        z     = x.141^(~x.74*x.142)
+        z.1   = yr.80^~x.74
+    
+     7. ~x    = ~x.75
+        yl    = yl.80
+        yr    = x.143^inv((~x.75*x.144))
+        z     = yl.80^~x.75
+        z.1   = x.143^inv(x.144)
+    
+     8. ~x    = ~x.75
+        yl    = yl.80
+        yr    = x.143^(x.144*inv(~x.75))
+        z     = yl.80^~x.75
+        z.1   = x.143^x.144
+    
+     9. ~x    = ~x.75
+        yl    = x.143^inv((~x.75*x.144))
+        yr    = yr.81
+        z     = x.143^inv(x.144)
+        z.1   = yr.81^~x.75
+    
+    10. ~x    = ~x.75
+        yl    = x.143^(x.144*inv(~x.75))
+        yr    = yr.81
+        z     = x.143^x.144
+        z.1   = yr.81^~x.75
+    
+    11. ~x    = ~x.76
+        yl    = yl.81
+        yr    = x.144^(x.146*inv((~x.76*x.145)))
+        z     = yl.81^~x.76
+        z.1   = x.144^(x.146*inv(x.145))
+    
+    12. ~x    = ~x.76
+        yl    = z.85^inv(~x.76)
+        yr    = x.145^x.146
+        z     = z.85
+        z.1   = x.145^(~x.76*x.146)
+    
+    13. ~x    = ~x.76
+        yl    = z.85^inv(~x.76)
+        yr    = x.145^inv((~x.76*x.146))
+        z     = z.85
+        z.1   = x.145^inv(x.146)
+    
+    14. ~x    = ~x.76
+        yl    = z.85^inv(~x.76)
+        yr    = x.145^(x.146*inv(~x.76))
+        z     = z.85
+        z.1   = x.145^x.146
+    
+    15. ~x    = ~x.76
+        yl    = x.143^x.145
+        yr    = x.144^x.146
+        z     = x.143^(~x.76*x.145)
+        z.1   = x.144^(~x.76*x.146)
+    
+    16. ~x    = ~x.76
+        yl    = x.144^x.146
+        yr    = z.86^inv(~x.76)
+        z     = x.144^(~x.76*x.146)
+        z.1   = z.86
+    
+    17. ~x    = ~x.76
+        yl    = x.144^inv((~x.76*x.146))
+        yr    = z.86^inv(~x.76)
+        z     = x.144^inv(x.146)
+        z.1   = z.86
+    
+    18. ~x    = ~x.76
+        yl    = x.144^(x.146*inv(~x.76))
+        yr    = z.86^inv(~x.76)
+        z     = x.144^x.146
+        z.1   = z.86
+    
+    19. ~x    = ~x.76
+        yl    = x.144^(x.146*inv((~x.76*x.145)))
+        yr    = yr.82
+        z     = x.144^(x.146*inv(x.145))
+        z.1   = yr.82^~x.76
+    
+    20. ~x    = ~x.77
+        yl    = z.86^inv(~x.77)
+        yr    = x.146^(x.148*inv((~x.77*x.147)))
+        z     = z.86
+        z.1   = x.146^(x.148*inv(x.147))
+    
+    21. ~x    = ~x.77
+        yl    = x.145^x.147
+        yr    = x.146^inv((~x.77*x.148))
+        z     = x.145^(~x.77*x.147)
+        z.1   = x.146^inv(x.148)
+    
+    22. ~x    = ~x.77
+        yl    = x.145^x.147
+        yr    = x.146^(x.148*inv(~x.77))
+        z     = x.145^(~x.77*x.147)
+        z.1   = x.146^x.148
+    
+    23. ~x    = ~x.77
+        yl    = x.145^inv((~x.77*x.147))
+        yr    = x.146^inv((~x.77*x.148))
+        z     = x.145^inv(x.147)
+        z.1   = x.146^inv(x.148)
+    
+    24. ~x    = ~x.77
+        yl    = x.145^inv((~x.77*x.147))
+        yr    = x.146^(x.148*inv(~x.77))
+        z     = x.145^inv(x.147)
+        z.1   = x.146^x.148
+    
+    25. ~x    = ~x.77
+        yl    = x.145^inv((~x.77*x.148))
+        yr    = x.146^x.147
+        z     = x.145^inv(x.148)
+        z.1   = x.146^(~x.77*x.147)
+    
+    26. ~x    = ~x.77
+        yl    = x.145^(x.147*inv(~x.77))
+        yr    = x.146^(x.148*inv(~x.77))
+        z     = x.145^x.147
+        z.1   = x.146^x.148
+    
+    27. ~x    = ~x.77
+        yl    = x.145^(x.148*inv(~x.77))
+        yr    = x.146^x.147
+        z     = x.145^x.148
+        z.1   = x.146^(~x.77*x.147)
+    
+    28. ~x    = ~x.77
+        yl    = x.145^(x.148*inv(~x.77))
+        yr    = x.146^inv((~x.77*x.147))
+        z     = x.145^x.148
+        z.1   = x.146^inv(x.147)
+    
+    29. ~x    = ~x.77
+        yl    = x.145^(x.148*inv((~x.77*x.147)))
+        yr    = z.87^inv(~x.77)
+        z     = x.145^(x.148*inv(x.147))
+        z.1   = z.87
+    
+    30. ~x    = ~x.78
+        yl    = x.146^x.148
+        yr    = x.147^(x.150*inv((~x.78*x.149)))
+        z     = x.146^(~x.78*x.148)
+        z.1   = x.147^(x.150*inv(x.149))
+    
+    31. ~x    = ~x.78
+        yl    = x.146^inv((~x.78*x.148))
+        yr    = x.147^(x.150*inv((~x.78*x.149)))
+        z     = x.146^inv(x.148)
+        z.1   = x.147^(x.150*inv(x.149))
+    
+    32. ~x    = ~x.78
+        yl    = x.146^(x.149*inv(~x.78))
+        yr    = x.147^(x.150*inv((~x.78*x.148)))
+        z     = x.146^x.149
+        z.1   = x.147^(x.150*inv(x.148))
+    
+    33. ~x    = ~x.78
+        yl    = x.146^(x.149*inv((~x.78*x.148)))
+        yr    = x.147^(x.150*inv(~x.78))
+        z     = x.146^(x.149*inv(x.148))
+        z.1   = x.147^x.150
+    
+    34. ~x    = ~x.78
+        yl    = x.146^(x.150*inv((~x.78*x.149)))
+        yr    = x.147^x.148
+        z     = x.146^(x.150*inv(x.149))
+        z.1   = x.147^(~x.78*x.148)
+    
+    35. ~x    = ~x.78
+        yl    = x.146^(x.150*inv((~x.78*x.149)))
+        yr    = x.147^inv((~x.78*x.148))
+        z     = x.146^(x.150*inv(x.149))
+        z.1   = x.147^inv(x.148)
+    
+    36. ~x    = ~x.79
+        yl    = x.147^(x.151*inv((~x.79*x.149)))
+        yr    = x.148^(x.152*inv((~x.79*x.150)))
+        z     = x.147^(x.151*inv(x.149))
+        z.1   = x.148^(x.152*inv(x.150))
+  */
+
+rule (modulo E) CreateTarget:
+   [
+   !PKRstateLog( scope, $gid, (one+one+one), $me, zl, secret, pub ),
+   !PKRstateLog( scope, $gid, one, $right_agent, secret, zr, pub_2 )
+   ]
+  --[
+  Unique( 'CreateTarget' ), TargetLog( scope, $me, xorm(secret) ),
+  Scope( scope )
+  ]->
+   [
+   !Anchor( scope, secret, <trace_expr, pub>, pub ),
+   !Anchor( scope, secret, <trace_expr, pub_2>, pub_2 )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) LeakPairwiseSecret:
+   [ !PKRstateLog( scope, $gid, one, $me, zl, secret, pub ) ]
+  --[
+  LeakPairwiseSecret( scope, xorm(secret) ),
+  Unique( 'LeakPairwiseSecret' )
+  ]->
+   [ !UsefulKnown( scope, secret ) ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) StartGroupSecrets:
+   [ !PKRstate( $gid, group_size, $me, my_right_shared_secret ) ]
+  --[ StartingGroupSecrets( $gid, $me ) ]->
+   [
+   PKPGstate( $gid, group_size, $me, $me, one, my_right_shared_secret,
+              my_right_shared_secret
+   )
+   ]
+
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) GroupSecrets:
+   [
+   PKPGstate( $gid, group_size, $me, $their_left, count,
+              their_left_DH_secret, partial_gkey
+   ),
+   !AO( $them,
+        <'Round2', $gid, group_size, $them, xorm(their_xor_contrib)>
+   ),
+   !Pmap( $gid, their_idx, $them ),
+   !Pmap( $gid, their_left_idx, $their_left )
+   ]
+  --[
+  BuildingGroupKey( $gid, $me, count ),
+  Contains( partial_gkey, their_left_DH_secret ),
+  LessThan( count, group_size ), Normalized( their_left_DH_secret ),
+  Normalized( their_xor_contrib ), NoDupes( partial_gkey ),
+  NormXorm( (their_left_DH_secret+their_xor_contrib),
+            their_right_DH_secret
+  ),
+  Unique( <'GroupSecrets', $me, $them> ),
+  Prev( group_size, their_idx, their_left_idx )
+  ]->
+   [
+   PKPGstate( $gid, group_size, $me, $them, (count+one),
+              their_right_DH_secret, (partial_gkey+their_right_DH_secret)
+   )
+   ]
+
+  // loop breaker: [0]
+  /* has exactly the trivial AC variant */
+
+rule (modulo E) FinishGroupKey:
+   [
+   PKPGstate( $gid, group_size, $me, $them, group_size,
+              running_secret, gkey
+   )
+   ]
+  --[ Finished( $gid, $me, gkey ), NoDupes( gkey ) ]->
+   [ !PKGstate( $gid, $me, gkey ) ]
+
+  /* has exactly the trivial AC variant */
+
+lemma CreateGroup:
+  exists-trace
+  "∃ gid group_size #t1.
+    ((CreateGroup( gid, group_size ) @ #t1) ∧
+     (group_size = (one+one+one))) ∧
+    (¬(group_size = (one+one)))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ gid group_size #t1.
+  (CreateGroup( gid, group_size ) @ #t1) ∧
+  (group_size = (one+one+one))
+ ∧
+  ¬(group_size = (one+one))"
+*/
+simplify
+solve( CreateGroup( gid, (one+one+one) ) @ #t1 )
+  case CreateGroup
+  SOLVED // trace found
+qed
+
+lemma CompleteRoundOne_Any:
+  exists-trace
+  "∃ gid A1 idx #t1. CompleteRoundOne( gid, idx, A1 ) @ #t1"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ gid A1 idx #t1. (CompleteRoundOne( gid, idx, A1 ) @ #t1)"
+*/
+simplify
+  case 1
+  solve( !Group( $gid, (one+one+one) ) ▶₀ #t1 )
+    case CreateGroup
+    solve( !StartParticipant( $gid, (one+one+one), $A ) ▶₁ #t1 )
+      case RoundOneStart1
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma CompleteRoundOne_1:
+  exists-trace
+  "∃ gid A1 idx #t1.
+    (CompleteRoundOne( gid, idx, A1 ) @ #t1) ∧ (idx = one)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ gid A1 idx #t1.
+  (CompleteRoundOne( gid, idx, A1 ) @ #t1) ∧ (idx = one)"
+*/
+simplify
+solve( !Group( $gid, (one+one+one) ) ▶₀ #t1 )
+  case CreateGroup
+  solve( !StartParticipant( $gid, one, $A ) ▶₁ #t1 )
+    case RoundOneStart1
+    SOLVED // trace found
+  qed
+qed
+
+lemma CompleteRoundOne_2:
+  exists-trace
+  "∃ gid A1 idx #t1.
+    (CompleteRoundOne( gid, idx, A1 ) @ #t1) ∧ (idx = (one+one))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ gid A1 idx #t1.
+  (CompleteRoundOne( gid, idx, A1 ) @ #t1) ∧ (idx = (one+one))"
+*/
+simplify
+solve( CompleteRoundOne( gid, (one+one), A1 ) @ #t1 )
+  case IndividualSecrets
+  solve( !Group( $gid, (one+one+one) ) ▶₀ #t1 )
+    case CreateGroup
+    solve( !StartParticipant( $gid, (one+one), $A ) ▶₁ #t1 )
+      case RoundOneStart1
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma CompleteRoundOne_3:
+  exists-trace
+  "∃ gid A1 idx #t1.
+    (CompleteRoundOne( gid, idx, A1 ) @ #t1) ∧ (idx = (one+one+one))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ gid A1 idx #t1.
+  (CompleteRoundOne( gid, idx, A1 ) @ #t1) ∧ (idx = (one+one+one))"
+*/
+simplify
+solve( CompleteRoundOne( gid, (one+one+one), A1 ) @ #t1 )
+  case IndividualSecrets
+  solve( !Group( $gid, (one+one+one) ) ▶₀ #t1 )
+    case CreateGroup
+    solve( !StartParticipant( $gid, (one+one+one), $A ) ▶₁ #t1 )
+      case RoundOneStart1
+      SOLVED // trace found
+    qed
+  qed
+qed
+
+lemma Finished1:
+  exists-trace "∃ gid A1 key #t1. Finished( gid, A1, key ) @ #t1"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ gid A1 key #t1. (Finished( gid, A1, key ) @ #t1)"
+*/
+simplify
+solve( PKPGstate( $gid, group_size, $me, $them, group_size,
+                  running_secret, key
+       ) ▶₀ #t1 )
+  case GroupSecrets_case_2
+  solve( (partial_gkey = their_left_DH_secret)  ∥
+         (∃ z. (partial_gkey = (their_left_DH_secret+z))) )
+    case case_2
+    solve( ((their_left_DH_secret+'g'^(~x*~x.1)+'g'^(~x*~x.2)) =
+            running_secret)  ∥
+           (∃ x.3.
+             ((their_left_DH_secret+'g'^(~x*~x.1)+'g'^(~x*~x.2)) =
+              (running_secret+x.3+x.3))) )
+      case case_2_case_01
+      solve( PKPGstate( $gid, (one+one+one), $me, $their_left, (one+one),
+                        'g'^(~x*~x.2), (z+'g'^(~x*~x.2))
+             ) ▶₀ #vr )
+        case GroupSecrets_case_01
+        solve( (z = 'g'^(~x*~x.2))  ∥ (∃ z.1. (z = (z.1+'g'^(~x*~x.2)))) )
+          case case_1
+          solve( PKPGstate( $gid, (one+one+one), $me, $right_agent, one,
+                            'g'^(~x*~x.2), 'g'^(~x*~x.2)
+                 ) ▶₀ #vr.9 )
+            case StartGroupSecrets
+            SOLVED // trace found
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma Finished:
+  exists-trace
+  "∃ gid key A1 A2 A3 #t1 #t2 #t3.
+    (((((Finished( gid, A1, key ) @ #t1) ∧
+        (Finished( gid, A2, key ) @ #t2)) ∧
+       (Finished( gid, A3, key ) @ #t3)) ∧
+      (¬(A1 = A2))) ∧
+     (¬(A1 = A3))) ∧
+    (¬(A2 = A3))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ gid key A1 A2 A3 #t1 #t2 #t3.
+  (Finished( gid, A1, key ) @ #t1) ∧
+  (Finished( gid, A2, key ) @ #t2) ∧
+  (Finished( gid, A3, key ) @ #t3)
+ ∧
+  (¬(A1 = A2)) ∧ (¬(A1 = A3)) ∧ (¬(A2 = A3))"
+*/
+simplify
+solve( PKPGstate( $gid, group_size, $me, $them, group_size,
+                  running_secret, key
+       ) ▶₀ #t1 )
+  case GroupSecrets_case_1
+  by contradiction /* from formulas */
+next
+  case GroupSecrets_case_2
+  solve( PKPGstate( $gid, (one+one+one), $me, $their_left, (one+one),
+                    their_left_DH_secret, partial_gkey
+         ) ▶₀ #vr )
+    case GroupSecrets_case_1
+    solve( PKPGstate( $gid, (one+one+one), $me, $right_agent, one,
+                      their_left_DH_secret.1, partial_gkey
+           ) ▶₀ #vr.9 )
+      case StartGroupSecrets_case_1
+      by contradiction /* from formulas */
+    next
+      case StartGroupSecrets_case_2
+      by contradiction /* from formulas */
+    next
+      case StartGroupSecrets_case_3
+      solve( ((their_left_DH_secret+'g'^(~x*~x.2)+'g'^(~x.1*~x.2)) =
+              running_secret)  ∥
+             (∃ x.3.
+               ((their_left_DH_secret+'g'^(~x*~x.2)+'g'^(~x.1*~x.2)) =
+                (running_secret+x.3+x.3))) )
+        case case_1
+        by contradiction /* from formulas */
+      next
+        case case_2_case_1
+        solve( PKPGstate( $gid, group_size, $me.1, $them.1, group_size,
+                          running_secret, ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+               ) ▶₀ #t2 )
+          case GroupSecrets_case_1
+          solve( PKPGstate( $gid, (one+one+one), $me.1, $their_left,
+                            (one+one), 'g'^(~x*~x.2), ('g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                 ) ▶₀ #vr.13 )
+            case GroupSecrets
+            solve( PKPGstate( $gid, (one+one+one), $me.1, $me, one,
+                              'g'^(~x.1*~x.2), 'g'^(~x.1*~x.2)
+                   ) ▶₀ #vr.14 )
+              case StartGroupSecrets
+              by contradiction /* from formulas */
+            qed
+          qed
+        next
+          case GroupSecrets_case_2
+          by solve( PKPGstate( $gid, (one+one+one), $me.1, $them, (one+one),
+                               'g'^(~x*~x.2), ('g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                    ) ▶₀ #vr.13 )
+        next
+          case GroupSecrets_case_3
+          by solve( PKPGstate( $gid, (one+one+one), $me.1, $their_left,
+                               (one+one), 'g'^(~x*~x.1), ('g'^(~x*~x.1)+'g'^(~x.1*~x.2))
+                    ) ▶₀ #vr.13 )
+        next
+          case GroupSecrets_case_4
+          solve( PKPGstate( $gid, (one+one+one), $me.1, $me, (one+one),
+                            'g'^(~x*~x.2), ('g'^(~x*~x.1)+'g'^(~x*~x.2))
+                 ) ▶₀ #vr.13 )
+            case GroupSecrets
+            solve( PKPGstate( $gid, (one+one+one), $me.1, $them, one,
+                              'g'^(~x*~x.1), 'g'^(~x*~x.1)
+                   ) ▶₀ #vr.14 )
+              case StartGroupSecrets
+              solve( PKPGstate( $gid, group_size, $me.1, $them.1, group_size,
+                                running_secret, ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                     ) ▶₀ #t3 )
+                case GroupSecrets_case_1
+                solve( PKPGstate( $gid, (one+one+one), $me.1, $their_left,
+                                  (one+one), 'g'^(~x*~x.2), ('g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                       ) ▶₀ #vr.16 )
+                  case GroupSecrets
+                  solve( PKPGstate( $gid, (one+one+one), $me.1, $me, one,
+                                    'g'^(~x.1*~x.2), 'g'^(~x.1*~x.2)
+                         ) ▶₀ #vr.17 )
+                    case StartGroupSecrets
+                    by contradiction /* from formulas */
+                  qed
+                qed
+              next
+                case GroupSecrets_case_2
+                by solve( PKPGstate( $gid, (one+one+one), $me.1, $them, (one+one),
+                                     'g'^(~x*~x.2), ('g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                          ) ▶₀ #vr.16 )
+              next
+                case GroupSecrets_case_3
+                by solve( PKPGstate( $gid, (one+one+one), $me.1, $their_left,
+                                     (one+one), 'g'^(~x*~x.1), ('g'^(~x*~x.1)+'g'^(~x.1*~x.2))
+                          ) ▶₀ #vr.16 )
+              next
+                case GroupSecrets_case_4
+                solve( PKPGstate( $gid, (one+one+one), $me.1, $me, (one+one),
+                                  'g'^(~x*~x.2), ('g'^(~x*~x.1)+'g'^(~x*~x.2))
+                       ) ▶₀ #vr.16 )
+                  case GroupSecrets
+                  solve( PKPGstate( $gid, (one+one+one), $me.1, $them, one,
+                                    'g'^(~x*~x.1), 'g'^(~x*~x.1)
+                         ) ▶₀ #vr.17 )
+                    case StartGroupSecrets
+                    by contradiction /* from formulas */
+                  qed
+                qed
+              next
+                case GroupSecrets_case_5
+                solve( PKPGstate( $gid, (one+one+one), $me.1, $them, (one+one),
+                                  'g'^(~x*~x.1), ('g'^(~x*~x.1)+'g'^(~x.1*~x.2))
+                       ) ▶₀ #vr.16 )
+                  case GroupSecrets
+                  solve( PKPGstate( $gid, (one+one+one), $me.1, $their_left, one,
+                                    'g'^(~x.1*~x.2), 'g'^(~x.1*~x.2)
+                         ) ▶₀ #vr.17 )
+                    case StartGroupSecrets
+                    SOLVED // trace found
+                  qed
+                qed
+              next
+                case GroupSecrets_case_6
+                by sorry
+              qed
+            qed
+          qed
+        next
+          case GroupSecrets_case_5
+          by sorry
+        next
+          case GroupSecrets_case_6
+          by sorry
+        qed
+      next
+        case case_2_case_2
+        by contradiction /* from formulas */
+      next
+        case case_2_case_3
+        by contradiction /* from formulas */
+      next
+        case case_2_case_4
+        by contradiction /* from formulas */
+      next
+        case case_2_case_5
+        by contradiction /* from formulas */
+      next
+        case case_2_case_6
+        by contradiction /* from formulas */
+      next
+        case case_2_case_7
+        by contradiction /* from formulas */
+      qed
+    qed
+  next
+    case GroupSecrets_case_2
+    by contradiction /* from formulas */
+  next
+    case GroupSecrets_case_3
+    by contradiction /* from formulas */
+  qed
+next
+  case GroupSecrets_case_3
+  by contradiction /* from formulas */
+next
+  case GroupSecrets_case_4
+  by contradiction /* from formulas */
+next
+  case GroupSecrets_case_5
+  by contradiction /* from formulas */
+next
+  case GroupSecrets_case_6
+  by sorry
+next
+  case GroupSecrets_case_7
+  by sorry
+next
+  case GroupSecrets_case_8
+  by contradiction /* from formulas */
+next
+  case GroupSecrets_case_9
+  by contradiction /* from formulas */
+qed
+
+lemma NoLeakTarget:
+  all-traces
+  "¬(∃ scope A secret1 #i #k.
+      ((TargetLog( scope, A, secret1 ) @ #i) ∧ (K( secret1 ) @ #k)) ∧
+      (¬(∃ secret2 #l.
+          (LeakPairwiseSecret( scope, secret2 ) @ #l) ∧ (#l < #k))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ scope A secret1 #i #k.
+  (TargetLog( scope, A, secret1 ) @ #i) ∧ (K( secret1 ) @ #k)
+ ∧
+  ∀ secret2 #l.
+   (LeakPairwiseSecret( scope, secret2 ) @ #l) ⇒ ¬(#l < #k)"
+*/
+simplify
+solve( !PKRstateLog( scope, $gid, (one+one+one), $me, zl, secret,
+                     pub
+       ) ▶₀ #i )
+  case PairwiseSecrets
+  solve( !PKRstateLog( <$gid, 'main'>, $gid, one, $right_agent,
+                       'g'^(~x.1*~x.2), zr, pub_2
+         ) ▶₁ #i )
+    case PairwiseSecrets
+    solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+      case AnchorOut_case_01
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_02
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_03
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_04
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_05
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_06
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_07
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_08
+      solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                      ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+             ) ▶₀ #vr.10 )
+        case KNormXormForwardProp_case_01
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_02
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_03
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_04
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_05
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_06
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_07
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_08
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_09
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_10
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_11
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_12
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_13
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_14
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_15
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_16
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_17
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_18
+        by contradiction /* from formulas */
+      qed
+    next
+      case AnchorOut_case_09
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_10
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_11
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_12
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_13
+      by contradiction /* from formulas */
+    next
+      case AuthOut_case_1
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_2
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_3
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_4
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_5
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_6
+      by contradiction /* forbidden KD-fact */
+    qed
+  qed
+qed
+
+lemma LeakConditionTarget:
+  all-traces
+  "∀ scope A secret1 #i #k.
+    ((TargetLog( scope, A, secret1 ) @ #i) ∧ (K( secret1 ) @ #k)) ⇒
+    (∃ secret2 #l.
+      (LeakPairwiseSecret( scope, secret2 ) @ #l) ∧ (#l < #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ scope A secret1 #i #k.
+  (TargetLog( scope, A, secret1 ) @ #i) ∧ (K( secret1 ) @ #k)
+ ∧
+  ∀ secret2 #l.
+   (LeakPairwiseSecret( scope, secret2 ) @ #l) ⇒ ¬(#l < #k)"
+*/
+simplify
+solve( !PKRstateLog( scope, $gid, (one+one+one), $me, zl, secret,
+                     pub
+       ) ▶₀ #i )
+  case PairwiseSecrets
+  solve( !PKRstateLog( <$gid, 'main'>, $gid, one, $right_agent,
+                       'g'^(~x.1*~x.2), zr, pub_2
+         ) ▶₁ #i )
+    case PairwiseSecrets
+    solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+      case AnchorOut_case_01
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_02
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_03
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_04
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_05
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_06
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_07
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_08
+      solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                      ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+             ) ▶₀ #vr.10 )
+        case KNormXormForwardProp_case_01
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_02
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_03
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_04
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_05
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_06
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_07
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_08
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_09
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_10
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_11
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_12
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_13
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_14
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_15
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_16
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_17
+        by contradiction /* from formulas */
+      next
+        case KNormXormForwardProp_case_18
+        by contradiction /* from formulas */
+      qed
+    next
+      case AnchorOut_case_09
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_10
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_11
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_12
+      by contradiction /* from formulas */
+    next
+      case AnchorOut_case_13
+      by contradiction /* from formulas */
+    next
+      case AuthOut_case_1
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_2
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_3
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_4
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_5
+      by contradiction /* forbidden KD-fact */
+    next
+      case AuthOut_case_6
+      by contradiction /* forbidden KD-fact */
+    qed
+  qed
+qed
+
+lemma LeakTarget:
+  exists-trace
+  "∃ scope A xorm_secret #i #k.
+    (TargetLog( scope, A, xorm_secret ) @ #i) ∧
+    (K( xorm_secret ) @ #k)"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ scope A xorm_secret #i #k.
+  (TargetLog( scope, A, xorm_secret ) @ #i) ∧
+  (K( xorm_secret ) @ #k)"
+*/
+simplify
+solve( !PKRstateLog( scope, $gid, (one+one+one), $me, zl, secret,
+                     pub
+       ) ▶₀ #i )
+  case PairwiseSecrets
+  solve( !PKRstateLog( <$gid, 'main'>, $gid, one, $right_agent,
+                       'g'^(~x.1*~x.2), zr, pub_2
+         ) ▶₁ #i )
+    case PairwiseSecrets
+    solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+      case AnchorOut_case_12
+      solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                      ('g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+             ) ▶₀ #vr.10 )
+        case CreateTarget
+        SOLVED // trace found
+      qed
+    qed
+  qed
+qed
+
+lemma NoLeakAllSecretsXorm:
+  all-traces
+  "¬(∃ scope secret xorm_secret #i #k.
+      ((SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+       (K( xorm_secret ) @ #k)) ∧
+      (¬(∃ secret2 #l.
+          (LeakPairwiseSecret( scope, secret2 ) @ #l) ∧ (#l < #k))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ scope secret xorm_secret #i #k.
+  (SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+  (K( xorm_secret ) @ #k)
+ ∧
+  ∀ secret2 #l.
+   (LeakPairwiseSecret( scope, secret2 ) @ #l) ⇒ ¬(#l < #k)"
+*/
+simplify
+  case 1
+  solve( ((group_size = one) ∧ (l_idx = group_size))  ∥
+         (∃ x. (group_size = (x+one)) ∧ (l_idx = x)) )
+    case case_1
+    by solve( !Group( $gid, one ) ▶₀ #i )
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_12
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_13
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_24
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case 2
+  solve( ((¬(group_size = one)) ∧ (r_idx = (one+one)))  ∥
+         ((group_size = one) ∧ (r_idx = one)) )
+    case case_1
+    solve( (l_idx = group_size)  ∥
+           (∃ x. (one = (x+one)) ∧ (l_idx = x)) )
+      case case_1
+      solve( !Group( $gid, group_size ) ▶₀ #i )
+        case CreateGroup
+        solve( !AO( $left_agent,
+                    <'Round1', $gid, (one+one+one), $left_agent, xorm(yl)>
+               ) ▶₁ #i )
+          case IndividualSecrets
+          solve( !AO( $right_agent,
+                      <'Round1', $gid, (one+one), $right_agent, xorm(yr)>
+                 ) ▶₂ #i )
+            case IndividualSecrets
+            solve( !PubDH1( $gid, (one+one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+              case IndividualSecrets
+              solve( !Pstate( $gid, one, $me, ~x.2 ) ▶₄ #i )
+                case IndividualSecrets
+                solve( !PubDH1( $gid, (one+one), $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                  case IndividualSecrets
+                  solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                    case AnchorOut_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_11
+                    solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                    ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                           ) ▶₀ #vr.8 )
+                      case KNormXormForwardProp_case_01
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_02
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_03
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_04
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_05
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_06
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_07
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_08
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_09
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_10
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_11
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_12
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_13
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_14
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_15
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_16
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_17
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_18
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_19
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_20
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_21
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_22
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_23
+                      by contradiction /* from formulas */
+                    qed
+                  next
+                    case AnchorOut_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( (l_idx = one)  ∥ (∃ x. (one = (x+one)) ∧ (l_idx = x)) )
+      case case_1
+      by solve( !Group( $gid, one ) ▶₀ #i )
+    qed
+  qed
+next
+  case 3
+  solve( ((my_idx = one) ∧ (l_idx = (my_idx+x)))  ∥
+         (∃ x. (my_idx = (x+one)) ∧ (l_idx = x)) )
+    case case_1
+    solve( !Group( $gid, (x+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, one, $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one), $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_12
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_13
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+x+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, one, $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, one, $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one+one), $right_agent, 'g'^~x.1
+                     ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_12
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_24
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_13
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case 4
+  solve( ((¬((l_idx+z) = (l_idx+one))) ∧
+          (r_idx = (l_idx+one+one)))  ∥
+         (((l_idx+z) = (l_idx+one)) ∧ (r_idx = one)) )
+    case case_1
+    solve( !Group( $gid, (l_idx+z) ) ▶₀ #i )
+      case CreateGroup_case_1
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, one, $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, one, $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one+one), $right_agent, 'g'^~x.1
+                     ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_12
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_24
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_13
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case CreateGroup_case_2
+      by contradiction /* from formulas */
+    qed
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_12
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_13
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_24
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma NoLeakAllSecretsBare:
+  all-traces
+  "¬(∃ scope secret xorm_secret #i #k.
+      ((SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+       (K( secret ) @ #k)) ∧
+      (¬(∃ secret2 #l.
+          (LeakPairwiseSecret( scope, secret2 ) @ #l) ∧ (#l < #k))))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ scope secret xorm_secret #i #k.
+  (SecretLog( scope, secret, xorm_secret ) @ #i) ∧ (K( secret ) @ #k)
+ ∧
+  ∀ secret2 #l.
+   (LeakPairwiseSecret( scope, secret2 ) @ #l) ⇒ ¬(#l < #k)"
+*/
+simplify
+  case 1
+  solve( ((group_size = one) ∧ (l_idx = group_size))  ∥
+         (∃ x. (group_size = (x+one)) ∧ (l_idx = x)) )
+    case case_1
+    by solve( !Group( $gid, one ) ▶₀ #i )
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case 2
+  solve( ((¬(group_size = one)) ∧ (r_idx = (one+one)))  ∥
+         ((group_size = one) ∧ (r_idx = one)) )
+    case case_1
+    solve( (l_idx = group_size)  ∥
+           (∃ x. (one = (x+one)) ∧ (l_idx = x)) )
+      case case_1
+      solve( !Group( $gid, group_size ) ▶₀ #i )
+        case CreateGroup
+        solve( !AO( $left_agent,
+                    <'Round1', $gid, (one+one+one), $left_agent, xorm(yl)>
+               ) ▶₁ #i )
+          case IndividualSecrets
+          solve( !AO( $right_agent,
+                      <'Round1', $gid, (one+one), $right_agent, xorm(yr)>
+                 ) ▶₂ #i )
+            case IndividualSecrets
+            solve( !PubDH1( $gid, (one+one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+              case IndividualSecrets
+              solve( !Pstate( $gid, one, $me, ~x.2 ) ▶₄ #i )
+                case IndividualSecrets
+                solve( !PubDH1( $gid, (one+one), $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                  case IndividualSecrets
+                  solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case cexp
+                    solve( !KU( ~x.1 ) @ #vk.3 )
+                      case AuthOut_case_1
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_2
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_3
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_4
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_5
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_6
+                      by contradiction /* forbidden KD-fact */
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( (l_idx = one)  ∥ (∃ x. (one = (x+one)) ∧ (l_idx = x)) )
+      case case_1
+      by solve( !Group( $gid, one ) ▶₀ #i )
+    qed
+  qed
+next
+  case 3
+  solve( ((my_idx = one) ∧ (l_idx = (my_idx+x)))  ∥
+         (∃ x. (my_idx = (x+one)) ∧ (l_idx = x)) )
+    case case_1
+    solve( !Group( $gid, (x+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, one, $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one), $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+x+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, one, $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, one, $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one+one), $right_agent, 'g'^~x.1
+                     ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case 4
+  solve( ((¬((l_idx+z) = (l_idx+one))) ∧
+          (r_idx = (l_idx+one+one)))  ∥
+         (((l_idx+z) = (l_idx+one)) ∧ (r_idx = one)) )
+    case case_1
+    solve( !Group( $gid, (l_idx+z) ) ▶₀ #i )
+      case CreateGroup_case_1
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, one, $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, one, $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one+one), $right_agent, 'g'^~x.1
+                     ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case CreateGroup_case_2
+      by contradiction /* from formulas */
+    qed
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma LeakConditionXorm:
+  all-traces
+  "∀ scope secret xorm_secret #i #k.
+    ((SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+     (K( xorm_secret ) @ #k)) ⇒
+    (∃ secret2 #l.
+      (LeakPairwiseSecret( scope, secret2 ) @ #l) ∧ (#l < #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ scope secret xorm_secret #i #k.
+  (SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+  (K( xorm_secret ) @ #k)
+ ∧
+  ∀ secret2 #l.
+   (LeakPairwiseSecret( scope, secret2 ) @ #l) ⇒ ¬(#l < #k)"
+*/
+simplify
+  case 1
+  solve( ((group_size = one) ∧ (l_idx = group_size))  ∥
+         (∃ x. (group_size = (x+one)) ∧ (l_idx = x)) )
+    case case_1
+    by solve( !Group( $gid, one ) ▶₀ #i )
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_12
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_13
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_24
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case 2
+  solve( ((¬(group_size = one)) ∧ (r_idx = (one+one)))  ∥
+         ((group_size = one) ∧ (r_idx = one)) )
+    case case_1
+    solve( (l_idx = group_size)  ∥
+           (∃ x. (one = (x+one)) ∧ (l_idx = x)) )
+      case case_1
+      solve( !Group( $gid, group_size ) ▶₀ #i )
+        case CreateGroup
+        solve( !AO( $left_agent,
+                    <'Round1', $gid, (one+one+one), $left_agent, xorm(yl)>
+               ) ▶₁ #i )
+          case IndividualSecrets
+          solve( !AO( $right_agent,
+                      <'Round1', $gid, (one+one), $right_agent, xorm(yr)>
+                 ) ▶₂ #i )
+            case IndividualSecrets
+            solve( !PubDH1( $gid, (one+one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+              case IndividualSecrets
+              solve( !Pstate( $gid, one, $me, ~x.2 ) ▶₄ #i )
+                case IndividualSecrets
+                solve( !PubDH1( $gid, (one+one), $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                  case IndividualSecrets
+                  solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                    case AnchorOut_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_11
+                    solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                    ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                           ) ▶₀ #vr.8 )
+                      case KNormXormForwardProp_case_01
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_02
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_03
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_04
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_05
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_06
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_07
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_08
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_09
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_10
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_11
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_12
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_13
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_14
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_15
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_16
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_17
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_18
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_19
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_20
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_21
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_22
+                      by contradiction /* from formulas */
+                    next
+                      case KNormXormForwardProp_case_23
+                      by contradiction /* from formulas */
+                    qed
+                  next
+                    case AnchorOut_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case AnchorOut_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( (l_idx = one)  ∥ (∃ x. (one = (x+one)) ∧ (l_idx = x)) )
+      case case_1
+      by solve( !Group( $gid, one ) ▶₀ #i )
+    qed
+  qed
+next
+  case 3
+  solve( ((my_idx = one) ∧ (l_idx = (my_idx+x)))  ∥
+         (∃ x. (my_idx = (x+one)) ∧ (l_idx = x)) )
+    case case_1
+    solve( !Group( $gid, (x+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, one, $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one), $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_12
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_13
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+x+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, one, $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, one, $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one+one), $right_agent, 'g'^~x.1
+                     ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_12
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_24
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_13
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case 4
+  solve( ((¬((l_idx+z) = (l_idx+one))) ∧
+          (r_idx = (l_idx+one+one)))  ∥
+         (((l_idx+z) = (l_idx+one)) ∧ (r_idx = one)) )
+    case case_1
+    solve( !Group( $gid, (l_idx+z) ) ▶₀ #i )
+      case CreateGroup_case_1
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, one, $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, one, $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one+one), $right_agent, 'g'^~x.1
+                     ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_12
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_24
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_13
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case CreateGroup_case_2
+      by contradiction /* from formulas */
+    qed
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_01
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_02
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_03
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_04
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_05
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_06
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_07
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_08
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_09
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_10
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_11
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_12
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_13
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x*~x.2)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case KNormXormForwardProp_case_01
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_02
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_03
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_04
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_05
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_06
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_07
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_08
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_09
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_10
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_11
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_12
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_13
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_14
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_15
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_16
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_17
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_18
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_19
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_20
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_21
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_22
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_23
+                    by contradiction /* from formulas */
+                  next
+                    case KNormXormForwardProp_case_24
+                    by contradiction /* from formulas */
+                  qed
+                next
+                  case AnchorOut_case_14
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_15
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_16
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_17
+                  by contradiction /* from formulas */
+                next
+                  case AnchorOut_case_18
+                  by contradiction /* from formulas */
+                next
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma LeakConditionBare:
+  all-traces
+  "∀ scope secret xorm_secret #i #k.
+    ((SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+     (K( secret ) @ #k)) ⇒
+    (∃ secret2 #l.
+      (LeakPairwiseSecret( scope, secret2 ) @ #l) ∧ (#l < #k))"
+/*
+guarded formula characterizing all counter-examples:
+"∃ scope secret xorm_secret #i #k.
+  (SecretLog( scope, secret, xorm_secret ) @ #i) ∧ (K( secret ) @ #k)
+ ∧
+  ∀ secret2 #l.
+   (LeakPairwiseSecret( scope, secret2 ) @ #l) ⇒ ¬(#l < #k)"
+*/
+simplify
+  case 1
+  solve( ((group_size = one) ∧ (l_idx = group_size))  ∥
+         (∃ x. (group_size = (x+one)) ∧ (l_idx = x)) )
+    case case_1
+    by solve( !Group( $gid, one ) ▶₀ #i )
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case 2
+  solve( ((¬(group_size = one)) ∧ (r_idx = (one+one)))  ∥
+         ((group_size = one) ∧ (r_idx = one)) )
+    case case_1
+    solve( (l_idx = group_size)  ∥
+           (∃ x. (one = (x+one)) ∧ (l_idx = x)) )
+      case case_1
+      solve( !Group( $gid, group_size ) ▶₀ #i )
+        case CreateGroup
+        solve( !AO( $left_agent,
+                    <'Round1', $gid, (one+one+one), $left_agent, xorm(yl)>
+               ) ▶₁ #i )
+          case IndividualSecrets
+          solve( !AO( $right_agent,
+                      <'Round1', $gid, (one+one), $right_agent, xorm(yr)>
+                 ) ▶₂ #i )
+            case IndividualSecrets
+            solve( !PubDH1( $gid, (one+one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+              case IndividualSecrets
+              solve( !Pstate( $gid, one, $me, ~x.2 ) ▶₄ #i )
+                case IndividualSecrets
+                solve( !PubDH1( $gid, (one+one), $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                  case IndividualSecrets
+                  solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case cexp
+                    solve( !KU( ~x.1 ) @ #vk.3 )
+                      case AuthOut_case_1
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_2
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_3
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_4
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_5
+                      by contradiction /* forbidden KD-fact */
+                    next
+                      case AuthOut_case_6
+                      by contradiction /* forbidden KD-fact */
+                    qed
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( (l_idx = one)  ∥ (∃ x. (one = (x+one)) ∧ (l_idx = x)) )
+      case case_1
+      by solve( !Group( $gid, one ) ▶₀ #i )
+    qed
+  qed
+next
+  case 3
+  solve( ((my_idx = one) ∧ (l_idx = (my_idx+x)))  ∥
+         (∃ x. (my_idx = (x+one)) ∧ (l_idx = x)) )
+    case case_1
+    solve( !Group( $gid, (x+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, one, $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one), $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+x+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, one, $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, one, $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one+one), $right_agent, 'g'^~x.1
+                     ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+next
+  case 4
+  solve( ((¬((l_idx+z) = (l_idx+one))) ∧
+          (r_idx = (l_idx+one+one)))  ∥
+         (((l_idx+z) = (l_idx+one)) ∧ (r_idx = one)) )
+    case case_1
+    solve( !Group( $gid, (l_idx+z) ) ▶₀ #i )
+      case CreateGroup_case_1
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, one, $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, (one+one+one), $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, one, $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, (one+one+one), $right_agent, 'g'^~x.1
+                     ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    next
+      case CreateGroup_case_2
+      by contradiction /* from formulas */
+    qed
+  next
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( 'g'^(~x.1*~x.2) ) @ #vk )
+                  case AuthOut_case_1
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_2
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_3
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_4
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_5
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case AuthOut_case_6
+                  by contradiction /* forbidden KD-fact */
+                next
+                  case cexp
+                  solve( !KU( ~x.1 ) @ #vk.3 )
+                    case AuthOut_case_1
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_2
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_3
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_4
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_5
+                    by contradiction /* forbidden KD-fact */
+                  next
+                    case AuthOut_case_6
+                    by contradiction /* forbidden KD-fact */
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma LeakXorm:
+  exists-trace
+  "∃ scope secret xorm_secret #i #k.
+    ((SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+     (K( xorm_secret ) @ #k)) ∧
+    (¬(∃ #l. LeakPairwiseSecret( scope, xorm_secret ) @ #l))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ scope secret xorm_secret #i #k.
+  (SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+  (K( xorm_secret ) @ #k)
+ ∧
+  ∀ #l. (LeakPairwiseSecret( scope, xorm_secret ) @ #l) ⇒ ⊥"
+*/
+simplify
+  case 1
+  solve( ((group_size = one) ∧ (l_idx = group_size))  ∥
+         (∃ x. (group_size = (x+one)) ∧ (l_idx = x)) )
+    case case_2
+    solve( !Group( $gid, (l_idx+one) ) ▶₀ #i )
+      case CreateGroup
+      solve( !AO( $left_agent,
+                  <'Round1', $gid, (one+one), $left_agent, xorm(yl)>
+             ) ▶₁ #i )
+        case IndividualSecrets
+        solve( !AO( $right_agent,
+                    <'Round1', $gid, one, $right_agent, xorm(yr)>
+               ) ▶₂ #i )
+          case IndividualSecrets
+          solve( !PubDH1( $gid, (one+one), $left_agent, 'g'^~x ) ▶₃ #i )
+            case IndividualSecrets
+            solve( !Pstate( $gid, (one+one+one), $me, ~x.2 ) ▶₄ #i )
+              case IndividualSecrets
+              solve( !PubDH1( $gid, one, $right_agent, 'g'^~x.1 ) ▶₅ #i )
+                case IndividualSecrets
+                solve( !KU( xorm('g'^(~x.1*~x.2)) ) @ #vk )
+                  case AnchorOut_case_17
+                  solve( !Anchor( <$gid, 'main'>, 'g'^(~x.1*~x.2), trace,
+                                  ('g'^(~x*~x.1)+'g'^(~x.1*~x.2))
+                         ) ▶₀ #vr.8 )
+                    case CreateTarget
+                    SOLVED // trace found
+                  qed
+                qed
+              qed
+            qed
+          qed
+        qed
+      qed
+    qed
+  qed
+qed
+
+lemma LeakBare:
+  exists-trace
+  "∃ scope secret xorm_secret #i #k.
+    ((SecretLog( scope, secret, xorm_secret ) @ #i) ∧
+     (K( secret ) @ #k)) ∧
+    (¬(∃ #l. LeakPairwiseSecret( scope, xorm_secret ) @ #l))"
+/*
+guarded formula characterizing all satisfying traces:
+"∃ scope secret xorm_secret #i #k.
+  (SecretLog( scope, secret, xorm_secret ) @ #i) ∧ (K( secret ) @ #k)
+ ∧
+  ∀ #l. (LeakPairwiseSecret( scope, xorm_secret ) @ #l) ⇒ ⊥"
+*/
+by sorry
+
+/*
+WARNING: the following wellformedness checks failed!
+
+unbound:
+  rule `KNormXormForwardProp' has unbound variables: 
+    x3
+  
+  rule `RoundOneStart1' has unbound variables: 
+    idx
+  
+  rule `GroupSecrets' has unbound variables: 
+    their_right_DH_secret
+
+restriction actions:
+  restriction `Inequality' references action 
+    (ProtoFact Linear "Neq" 2,2,Linear)
+  but no rule has such an action.
+  
+  restriction `CompleteRoundTwo' references action 
+    (ProtoFact Linear "CompleteRoundTwo" 3,3,Linear)
+  but no rule has such an action.
+*/
+
+end

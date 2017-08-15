@@ -1,0 +1,309 @@
+# Limited Proof of (n+1)sec GKEX
+
+This writeup refers to results from `gkep_normxorm_simplified_cleaned.spthy`.
+This was joint work between Alex Balducci and Andy Lee. Alex did the work of
+expressing the GKEX portion of the (n+1)sec protocol in the Tamarin language,
+and Andy developed methods to make the protocol and proofs of security
+terminate. This documents an attempt to prove the group key (gkey) is
+confidential using a combination of human and automated proof. The proof
+is limited to the case where there are only three participants, and
+only one group is ever instantiated.
+
+There are multiple reasons why parts of the proof are done by hand. First,
+Tamarin's language cannot express some partial results that would greatly
+simplify the complete proof. For example, it cannot express that leaking any DH
+secret is equivalent to leaking all DH secrets and also the final group key.
+Symmetry arguments are also not expressable, but greatly simplify the proof,
+since they allow us to focus Tamarin to attack only a single DH secret, chosen
+arbitrarily.
+
+Tamarin also does not use forward propagation instead of backtracking when the
+former would be far more efficient and the latter may not even terminate. To
+compensate for this, I have limited candidate selection for backtracking and
+attempted to justify these restrictions by hand.
+
+Although the proof is not fully automatic, it is still useful in that it reduces
+the amount of work for the human prover, and it reduces the amount of human work
+that needs to be checked. Additionally, the human parts of the proof are short
+and work at a high level of abstraction, which takes advantage of human
+strengths while avoiding human weaknesses. On the other hand, the automated
+parts of the proof exercise simpler, lower-level logic, but there are many
+statements to check. In this way work of producing the proof is portioned
+amongst human and computer such that each of prover is only given tasks it is
+well-suited for.
+
+
+Symmetry arguments
+===================
+
+- Derivation of the final group key requires knowledge of every DH secret.
+
+- By way of symmetry, if any DH secret can be found without a direct leak of a
+  particular secret, all of them can be found. The protocol is completely
+  symmetric with respect to participants unless/until we choose a particular DH
+  secret to leak.
+
+- It is checked by lemmas `LeakXorm` in Tamarin that by leaking the right DH
+  secret of particpant 1 (the DH secret shared between participants 1 and 2),
+  the right DH secret for participant 3 is derivable by the attacker.
+
+
+Limiting XOR expression generation
+===================================
+
+In `anchored-xors-proof-by-hand.txt`, it is shown that, under certain
+assumptions that are met by our use case, to obtain a "singleton"[^def-singleton] target
+secret by a sequence of XOR operations, one can use the following
+semi-declarative pseudo code:
+
+
+    def trace_to_secret(initial_anchor):
+
+        anchor = initial_anchor
+        trace = set([initial_anchor])
+
+        loop until break:
+            overlaps = { known XOR expressions that "overlap" (have a common term) with `anchor`
+                         and don't contain the target secret }
+            if overlaps is empty:
+                break
+ 
+            other_expr = pick_one(overlaps)
+
+            trace.add(other_expr)
+
+            anchor = xor(anchor, other_expr) 
+
+            if anchor == target_secret:
+                # Found the secret! early termination
+                return trace
+
+        return None
+
+
+    for anchor_expr in { public XOR expressions containing target secret }:
+        # a trace is a set, since XOR is commutative and associative
+        loop until all possible traces are exhausted:
+
+            trace = trace_to_secret(inital_anchor)
+
+            if trace is not None:
+                break
+
+
+The singleton target secret can be found if and only if it can be found by the
+above method.
+
+Assuming that knowledge of any DH secret implies the knowledge of all
+secrets[^single-secret-assumption], WLOG, we may disallow the Tamarin attacker
+to create actual XOR expressions using any discovered DH secrets, and simply
+consider security to be compromised when any DH secret is compromised. In other
+words the game is over and the attacker has won, so we do not need the game to
+continue.
+
+NB there are only three kinds of expressions containing DH secrets: 1)
+expressions derived without use of XOR, 2) public expressions created from XORs
+of secrets, which we present to the Tamarin attacker directly, and 3) XOR
+expressions that the Tamarin attacker generates itself.
+
+The only derived expressions of the first kind that could possibly contain DH
+secrets are the DH secrets themselves. Since we assume the attacker has won by
+obtaining any expression of the first kind, we may disable creating XORs using
+those expressions. This leaves only expressions of the second as kind as a basis
+for creating expressions of the third kind.
+
+With these simplifications applied WLOG, the rest of proof of secrecy of the
+group key can be completed automatically by Tamarin in the lemma
+`NoLeakAllSecrets`.
+
+Note that the agreement on the group key will be checked in the protocol when it
+is used to send messages via AEAD. This is not treated here; we are only
+concerned about secrecy of the group key here.
+
+
+Summary of Key Simplifications
+-------------------------------
+
+- We don't need to provide the attacker with the ability to create XOR
+  expressions from DH secrets, because if it can do so, it has already won. We
+  just need to properly encode the the attacker win condition in our security
+  lemma.
+
+- Since obtaining any DH secret is a complete win for the attacker, by symmetry, we can
+  pick one particular secret for the attacker to focus on. This reduces computation
+  considerably.
+
+
+Implementation Details
+-----------------------
+
+I have implemented Xor so as to carefully control the Tamarin attacker's search
+for attacks. It is very easy to define rules that let the Tamarin attacker start
+down a pathological search path that does not terminate, yet to a human is
+obviously useless.
+
+Since Xor is associative and commutative, Xor expressions can be modeled using
+multisets of terms. However, they cannot be modeled as bare multisets, as
+Tamarin treats each element of a known multiset as also known. This does not
+model the semantics of Xor correctly, as one cannot derive `a` or `b` from
+`XOR(a, b)`.
+
+Therefore I wrap the multisets in the `xorm` function when publishing them to
+the attacker. The `xorm` function has no associated equations and is declared as
+"private". The privacy of the function means the Tamarin attacker cannot create
+its own `xorm` expressions directly, and can only use rules that I have provided
+to it to obtain new `xorm` expressions. This limitation is so that Tamarin does
+not generate an infinite number of `xorm(xorm(xorm(...)))` expressions and some
+other pathological and useless expressions like `xorm(x + x + y)`[^plus-symbol].
+The fact that there are no equations means that the `xorm` function is only used
+to stop Tamarin from incorrectly deriving knowledge of the terms making up the
+Xor expression from knowledge of the evaluated result of the Xor expression. NB
+since `xorm` is private, security lemmas about confidentiality of DH secrets
+need to be stated in both `xorm` and bare form.
+
+NB I normalize all newly created Xor expressions. By "normalize" I mean that all
+terms that cancel out are removed. Additionally, I do not allow the creation of
+Xor expressions that evaluate to zero, because these are useless.
+
+Since the confidentiality of the group key is equivalent to the confidentiality
+of any DH secret, a particular DH secret is chosen as the target for Tamarin
+attacker to attempt to find. If it finds the target secret then we consider that
+the attacker has won. This can be seen in the `CreateTarget` rule, in which the
+initial `!Anchor` facts are created. An `!Anchor` fact encodes the target
+secret, a normalized Xor expression containing the secret (the "anchor
+expression"), and a trace of how the anchor expression was created all the way
+from the initial anchor expression. Since Xor is associative and commutative,
+the trace is modeled as a set.[^multiset]
+
+If Tamarin is allowed to create new "initial" `!Anchor` facts, that is,
+`!Anchor` facts not derived from previous `!Anchor` facts, it appears to
+backtrack without termination in the hopes that it can find a valid root
+`!Anchor` fact.
+
+Therefore I make the restriction that a new `!Anchor` fact can be created by the
+attacker only by combining an existing `!Anchor` fact and a `!UsefulKnown` fact.
+It is up to the human to provide all valid initial `!Anchor` facts to the
+Tamarin attacker, and to provide all public expressions containing DH secrets as
+`!UsefulKnown` facts. A valid initial `!Anchor` fact is one that corresponds to
+a published Xor expression such that the Xor expression strictly contains the
+target secret. I assert that from the definition of the protocol, for a
+particular target DH secret, there are only two valid initial `!Anchor` facts,
+corresponding to the public Xor contributions of the two participants who share
+the target DH secret during their DH key exchange.
+
+If the Tamarin attacker can create its own Xor expression containing a secret
+without using a previous `!Anchor` fact, it must already know a DH secret, and
+therefore has already won. Therefore by disallowing the attacker from creating
+its own `!Anchor` facts, we do not lose any generality.
+
+NB the `CreateTarget` rule provides `!Anchor` facts corresponding to each of the
+two public Xor expressions containing the target secret.
+
+
+Further notes
+--------------
+
+Note that it might be possible to automate more of the proof by allowing Tamarin
+to generate `!UsefulKnown` facts by combining `!UsefulUnknown` facts with known
+facts. However, in my experiments, it takes much longer to run, and it has not
+been shown to terminate. We may require better proof search techniques to make
+this terminate (discussed further below).
+
+NB: Perhaps this document can be improved by clearly stating how we use the
+random oracle model to formalize some of our assumptions about what terms the
+attacker can generate. A key optimization is that the Tamarin attacker does not
+guess elements from the DH group, and by extension does not put these guessed
+elements into Xor expressions.
+
+
+[^def-singleton]: Here "singleton" means any expression that is equal to a DH
+    secret, and can therefore be expressed without XORing DH secrets together.
+    Elsewhere it can mean any expression created from non-XOR operations on
+    fresh values, including the DH private keys and the DH public keys.
+
+[^single-secret-assumption]: One can simply follow the procedure that the
+    regular protocol participants follow to obtain the other DH secrets from
+    a single DH secret. Although each participant actually knows two DH secrets,
+    only one is necessary as described in the protocol spec.
+
+[^multiset]: In fact this is a multiset in Tamarin, but I apply a restriction to
+    ensure that the multiset never has two of the same term.
+
+[^plus-symbol]: In Tamarin, the `+` is for construction of multisets.
+
+
+Automatically Proved Lemmas
+============================
+
+The key lemmas are `NoLeakTarget`, `NoLeakAllSecretsXorm`,
+`NoLeakAllSecretsBare`, and `Finished`. There are also various other lemmas for
+sanity checks and variations on the listed lemmas.
+
+- `NoLeakTarget` states that the DH secret for participant 3 is not knowable by
+  the attacker as long as we do not leak a DH secret directly. Note that the
+  only direct leak implemented was for the DH secret shared between participants
+  1 and 2. This can easily be generalized to leaks of arbitrary DH secrets by
+  symmetry arguments.
+
+- `NoLeakAllSecretsXorm` states that no DH secrets in the `xorm` form are
+  leaked, no direct leak of a DH secret. This is a more general version of
+  `NoLeakTarget`. For example, if the DH secret is `'g'^a` then the `xorm` form
+  is `xorm('g'^a)`
+
+- `NoLeakAllSecretsBare` is the same as `NoLeakAllSecretsXorm` but for bare
+  secrets -- that is, without `xorm` wrapping the secret.
+
+- `Finished` states that there is a trace where all three participants obtain
+  and agree on a gkey. This is to show that the protocol as described actually
+  functions and we are not proving security on the empty set of traces.
+
+- `LeakTarget` is a sanity check to see if the obvious attack succeeds. It
+  states that the attacker can obtain the secret for participant 3 if we leak
+  the right DH for participant 1.
+
+- `LeakConditionTarget` merely rephrases `NoLeakTarget` using different a
+  quantifier.
+
+
+Lessons
+========
+
+Although Tamarin was not able to automatically prove as much as might be
+desired, it forces the user to think about and formalize what assumptions they
+are using to limit Tamarin's attack search. This gives the user a clearer grasp
+on what areas there may be gaps in their logic.
+
+
+Future
+=======
+
+The human-only proof that the transformations of the original problem were done WLOG
+could be proven in a more powerful system like Isabelle.
+
+The efficiency/termination properties of Tamarin could be improved by using only
+forward propagation for exploring xor expressions. There are a finite number of
+Xor expressions that can be built, yet it seems by only using backtracking,
+Tamarin will get into an endless loop.
+
+The inductive proof for group sizes greater than 3 may be beyond the reach of
+the current version of Tamarin. This problem needs further consideration. It may
+be useful to reimplement the proof in Isabelle.
+
+There is also a higher-level way to prove that a DH secret cannot be leaked from
+the public Xors of pairs of DH secrets, based on a parity argument (see
+`parity-proof-by-hand.md`). This would also be useful to verify using Isabelle.
+
+The proof that there exists a trace where the participants actually complete the
+protocol does not terminate if one uses Tamarin's "autoprove" heuristic. It
+would be useful to write down a subgoal-prioritization algorithm for Tamarin to
+use, so that the proof requires less human interaction. Other attempts to
+increase automation may also be made to terminate by tuning subgoal
+prioritization.
+
+
+Amusing Story
+==============
+
+When I did not authenticate a DH public key, the Tamarin attacker sent `'g'^1`
+as a pubkey. A participant with pubkey `'g'^~x` then derived `'g'^~x` as their
+shared secret, which compromised the gkey.

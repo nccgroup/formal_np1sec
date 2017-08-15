@@ -1,0 +1,44 @@
+#!/usr/bin/python
+
+import sys
+
+lines = sys.stdin.readlines()
+
+l1 = []
+l2 = []
+l3 = []
+l4 = []
+lemma = sys.argv[1]
+
+sys.stderr.writelines(lines)
+
+for line in lines:
+    num = line.split(':')[0]
+
+    if lemma == "Finished":
+        if "PKPGstate" in line and 'me.1' in line:
+            l1.append(num)
+        elif "PKPGstate" in line and 'me.2' in line:
+            l2.append(num)
+        elif "PKPGstate" in line and 'me,' in line:
+            l3.append(num)
+        else:
+            l4.append(num)
+
+    elif lemma == "LeakTarget":
+        if "Anchor" in line and 'me.1' in line:
+            l1.append(num)
+        elif "Anchor" in line and 'me.2' in line:
+            l2.append(num)
+        elif "Anchor" in line and 'me,' in line:
+            l3.append(num)
+        else:
+            l4.append(num)
+
+    else:
+        exit(0)
+
+ranked = l1 + l2 + l3 + l4
+
+for i in ranked:
+    print i

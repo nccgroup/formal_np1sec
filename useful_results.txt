@@ -1,0 +1,26 @@
+- Writeup: gkep_normxorm_simplified_writeup.txt
+- Formal Spec: gkep_normxorm_simplified_cleaned.spthy
+- Tamarin output: proof_archive/GKEP_3_normxorm_simplified_cleaned_proof.spthy
+
+- Proof by hand for xor method: anchored-xors-proof-by-hand.txt 
+- Alternative proof by hand for xor: parity-proof-by-hand.md
+
+- xor method spec: normalized-xorm-useful-nozero.spthy
+
+---
+
+I developed a way to handle xors while keeping term rewriting bounded (convergent?).
+See anchored-xors-proof-by-hand.txt for the reasoning behind this technique.
+
+The technique is implemented and tested in `normalized-xorm-useful-nozero.spthy`.
+
+The technique is then applied to a simplified version of the np1sec protocol in
+gkep_normxorm_simplified_cleaned.spthy and gkep_normxorm_simplified.spthy.
+
+Note that the fact that the proof that the simplified version implies secrecy
+of the group shared key in the general case for a three-party gkex is
+nontrivial and still needs to be written up.
+
+Furthermore, the proof by induction on number of participants needs further
+consideration.
+

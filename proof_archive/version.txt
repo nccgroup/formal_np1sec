@@ -1,0 +1,10 @@
+---
+
+Version info for
+GKEP_3_normxorm_simplified_cleaned_proof.spthy
+
+Ran using Jan Dreier's dev branch. git commit
+
+1d59aca4ad38ad9c8c2e43b52a5d60de68a33dcd
+
+---
